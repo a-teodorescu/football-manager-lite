@@ -146,3 +146,18 @@ supabase/
 3. Add player development and morale changes after matches.
 4. Add injuries and suspensions.
 5. Move official match simulation server-side for anti-cheat.
+
+
+## Netlify install fix
+
+This archive intentionally does not include `package-lock.json`. The previous lockfile was generated in a restricted environment and could cause Netlify npm installs to fail with missing CLI binaries such as `vite: not found`. Netlify should generate a fresh lock/install from the public npm registry.
+
+Committed `.npmrc` forces the public npm registry:
+
+```txt
+registry=https://registry.npmjs.org/
+fund=false
+audit=false
+```
+
+If Netlify still uses a cached broken install, run: Deploys -> Trigger deploy -> Clear cache and deploy site.
