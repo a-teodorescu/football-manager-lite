@@ -3,12 +3,20 @@ import type { Fixture } from "../engine/fixtureGenerator";
 import type { StandingRow } from "../engine/standings";
 import type { Tactic, Team } from "../engine/types";
 
+export interface ClubProfile {
+  name: string;
+  city: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
 export interface ManagerSavePayload {
   version: number;
   managerId: string;
   seasonNumber: number;
   currentRound: number;
   userTactic: Tactic;
+  clubProfile?: ClubProfile;
   teams: Team[];
   fixtures: Fixture[];
   results: FixtureResult[];

@@ -2,7 +2,7 @@
 
 Browser/mobile football management simulator prototype.
 
-Current version: `0.5.0`
+Current version: `0.6.0`
 
 ## What is included now
 
@@ -10,13 +10,15 @@ Current version: `0.5.0`
 - Deterministic TypeScript match engine
 - Supabase Auth with email/password register, login and logout
 - Per-user saves using Supabase Auth `user.id`
+- Real club creation flow after register/login
+- User club name, city and colors stored in the save payload
 - 8 mock teams
 - 14 rounds
 - 56 fixtures
 - round-by-round simulation
 - Squad tab for the user's club
 - Tactics tab with formation, mentality and pressing
-- user tactic affects future FC Bucuresti matches
+- user tactic affects future matches for the created club
 - standings update after every simulated round
 - match report with stats and timeline
 - local save/load scoped per authenticated user
@@ -87,11 +89,12 @@ npm run check     # TypeScript check
 
 1. Register or login with email/password.
 2. Open Dashboard.
-3. Go to Squad to inspect FC Bucuresti players.
-4. Go to Tactics and change formation, mentality or pressing.
-5. Click `Simuleaza etapa` to play the next round.
-6. Check Program, Meci curent and Clasament.
-7. Save locally or save to Supabase; both are scoped to the authenticated user.
+3. Create your club name, city and colors if this is a new user.
+4. Go to Squad to inspect your generated players.
+5. Go to Tactics and change formation, mentality or pressing.
+6. Click `Simuleaza etapa` to play the next round.
+7. Check Program, Meci curent and Clasament.
+8. Save locally or save to Supabase; both are scoped to the authenticated user.
 
 ## Supabase setup
 
@@ -113,7 +116,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 
 6. Redeploy Netlify.
 
-The app uses Supabase Auth REST endpoints and the authenticated access token for saving/loading. The `manager_saves.manager_id` value is always the current `user.id`, and RLS allows each user to access only their own row.
+The app uses Supabase Auth REST endpoints and the authenticated access token for saving/loading. The `manager_saves.manager_id` value is always the current `user.id`, and RLS allows each user to access only their own row. The club profile is stored in `payload.clubProfile`.
 
 ## Project structure
 
@@ -143,8 +146,7 @@ supabase/
 
 ## Next planned steps
 
-1. Add real club creation screen.
-2. Add manual starting XI selection.
+1. Add manual starting XI selection.
 3. Add player development and morale changes after matches.
 4. Add injuries and suspensions.
 5. Move official match simulation server-side for anti-cheat.

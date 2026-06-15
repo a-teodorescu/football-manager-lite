@@ -1,6 +1,6 @@
--- Football Manager Lite v0.5 - authenticated per-user save table.
+-- Football Manager Lite v0.6 - authenticated per-user save table.
 -- Run this in Supabase SQL Editor after enabling Supabase Auth.
--- Each authenticated user can read/write only their own save through auth.uid().
+-- Each authenticated user can read/write only their own save through auth.uid(). The club profile is stored inside payload jsonb.
 
 create table if not exists public.manager_saves (
   manager_id uuid primary key references auth.users(id) on delete cascade,

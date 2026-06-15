@@ -14,6 +14,7 @@ import { calculateTeamStrength } from "./engine/teamStrength";
 import { createInitialStandings, StandingRow } from "./engine/standings";
 import { generateFixtures } from "./engine/fixtureGenerator";
 import {
+  ClubProfile,
   ManagerSavePayload,
   clearLocalStorageSave,
   isSupabaseConfigured,
@@ -30,7 +31,12 @@ import {
   registerWithEmail,
 } from "./lib/authService";
 
-const USER_CLUB_NAME = "FC Bucuresti";
+const DEFAULT_CLUB_PROFILE: ClubProfile = {
+  name: "FC Bucuresti",
+  city: "Bucuresti",
+  primaryColor: "#2563eb",
+  secondaryColor: "#f8fafc",
+};
 
 type Tab = "dashboard" | "squad" | "tactics" | "match" | "fixtures" | "standings";
 type SaveStatus = string;
@@ -40,6 +46,7 @@ interface GameState {
   seasonNumber: number;
   currentRound: number;
   userTactic: Tactic;
+  clubProfile: ClubProfile;
   teams: Team[];
   fixtures: Fixture[];
   results: FixtureResult[];
@@ -47,14 +54,75 @@ interface GameState {
   selectedFixtureId?: string;
 }
 
-function createNewGame(seasonNumber = 1, userTactic: Tactic = defaultUserTactic): GameState {
-  const teams = createMockLeagueTeams();
+function normalizeClubProfile(profile?: Partial<ClubProfile>): ClubProfile {
+  const name = profile?.name?.trim() || DEFAULT_CLUB_PROFILE.name;
+  const city = profile?.city?.trim() || DEFAULT_CLUB_PROFILE.city;
+
+  return {
+    name: name.slice(0, 40),
+    city: city.slice(0, 40),
+    primaryColor: profile?.primaryColor || DEFAULT_CLUB_PROFILE.primaryColor,
+    secondaryColor: profile?.secondaryColor || DEFAULT_CLUB_PROFILE.secondaryColor,
+  };
+}
+
+function applyClubProfileToTeams(teams: Team[], clubProfile: ClubProfile): Team[] {
+  return teams.map((team) =>
+    team.id === USER_TEAM_ID
+      ? {
+          ...team,
+          name: clubProfile.name,
+          players: team.players.map((player) => ({ ...player })),
+        }
+      : team
+  );
+}
+
+
+function applyClubProfileToFixtures(fixtures: Fixture[], clubProfile: ClubProfile): Fixture[] {
+  return fixtures.map((fixture) => ({
+    ...fixture,
+    homeTeam: fixture.homeTeam.id === USER_TEAM_ID ? { ...fixture.homeTeam, name: clubProfile.name } : fixture.homeTeam,
+    awayTeam: fixture.awayTeam.id === USER_TEAM_ID ? { ...fixture.awayTeam, name: clubProfile.name } : fixture.awayTeam,
+  }));
+}
+
+function applyClubProfileToResults(results: FixtureResult[], clubProfile: ClubProfile): FixtureResult[] {
+  return results.map((item) => ({
+    ...item,
+    fixture: {
+      ...item.fixture,
+      homeTeam:
+        item.fixture.homeTeam.id === USER_TEAM_ID
+          ? { ...item.fixture.homeTeam, name: clubProfile.name }
+          : item.fixture.homeTeam,
+      awayTeam:
+        item.fixture.awayTeam.id === USER_TEAM_ID
+          ? { ...item.fixture.awayTeam, name: clubProfile.name }
+          : item.fixture.awayTeam,
+    },
+    result: {
+      ...item.result,
+      homeTeamName: item.result.homeTeamId === USER_TEAM_ID ? clubProfile.name : item.result.homeTeamName,
+      awayTeamName: item.result.awayTeamId === USER_TEAM_ID ? clubProfile.name : item.result.awayTeamName,
+    },
+  }));
+}
+
+function createNewGame(
+  clubProfile: ClubProfile = DEFAULT_CLUB_PROFILE,
+  seasonNumber = 1,
+  userTactic: Tactic = defaultUserTactic
+): GameState {
+  const normalizedClubProfile = normalizeClubProfile(clubProfile);
+  const teams = applyClubProfileToTeams(createMockLeagueTeams(), normalizedClubProfile);
   const fixtures = generateFixtures(teams);
 
   return {
     seasonNumber,
     currentRound: 1,
     userTactic,
+    clubProfile: normalizedClubProfile,
     teams,
     fixtures,
     results: [],
@@ -90,6 +158,7 @@ function getSavePayload(game: GameState, managerId: string): ManagerSavePayload 
     seasonNumber: game.seasonNumber,
     currentRound: game.currentRound,
     userTactic: game.userTactic,
+    clubProfile: game.clubProfile,
     teams: game.teams,
     fixtures: game.fixtures,
     results: game.results,
@@ -100,14 +169,21 @@ function getSavePayload(game: GameState, managerId: string): ManagerSavePayload 
 }
 
 function gameFromPayload(payload: ManagerSavePayload): GameState {
+  const savedUserTeamName = payload.teams.find((team) => team.id === USER_TEAM_ID)?.name;
+  const clubProfile = normalizeClubProfile(payload.clubProfile ?? { name: savedUserTeamName });
+  const teams = applyClubProfileToTeams(payload.teams, clubProfile);
+
   return {
     seasonNumber: payload.seasonNumber,
     currentRound: payload.currentRound,
     userTactic: payload.userTactic,
-    teams: payload.teams,
-    fixtures: payload.fixtures,
-    results: payload.results,
-    standings: payload.standings,
+    clubProfile,
+    teams,
+    fixtures: applyClubProfileToFixtures(payload.fixtures, clubProfile),
+    results: applyClubProfileToResults(payload.results, clubProfile),
+    standings: payload.standings.map((row) =>
+      row.teamId === USER_TEAM_ID ? { ...row, teamName: clubProfile.name } : row
+    ),
     selectedFixtureId: payload.selectedFixtureId,
   };
 }
@@ -124,6 +200,22 @@ function createInitialGameFromStoredSession(): GameState {
   return localPayload ? gameFromPayload(localPayload) : createNewGame();
 }
 
+function shouldRequireClubSetupFromStoredSession(): boolean {
+  const storedSession = getStoredAuthSession();
+  if (!storedSession) return false;
+
+  return !loadFromLocalStorage(storedSession.user.id);
+}
+
+function getBlankClubDraft(): ClubProfile {
+  return {
+    name: "",
+    city: "",
+    primaryColor: DEFAULT_CLUB_PROFILE.primaryColor,
+    secondaryColor: DEFAULT_CLUB_PROFILE.secondaryColor,
+  };
+}
+
 export default function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -133,6 +225,8 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [game, setGame] = useState<GameState>(() => createInitialGameFromStoredSession());
+  const [clubSetupRequired, setClubSetupRequired] = useState(() => shouldRequireClubSetupFromStoredSession());
+  const [clubDraft, setClubDraft] = useState<ClubProfile>(() => getBlankClubDraft());
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -179,12 +273,16 @@ export default function App() {
           setAuthSession(result.session);
           const localPayload = loadFromLocalStorage(result.session.user.id);
           setGame(localPayload ? gameFromPayload(localPayload) : createNewGame());
+          setClubSetupRequired(!localPayload);
+          setClubDraft(getBlankClubDraft());
         }
       } else {
         const session = await loginWithEmail(authEmail.trim(), authPassword);
         setAuthSession(session);
         const localPayload = loadFromLocalStorage(session.user.id);
         setGame(localPayload ? gameFromPayload(localPayload) : createNewGame());
+        setClubSetupRequired(!localPayload);
+        setClubDraft(getBlankClubDraft());
         setAuthStatus("Login reusit.");
       }
     } catch (error) {
@@ -204,6 +302,8 @@ export default function App() {
     } finally {
       setAuthSession(null);
       setGame(createNewGame());
+      setClubSetupRequired(false);
+      setClubDraft(getBlankClubDraft());
       setSaveStatus("");
       setErrorMessage("");
       setAuthPassword("");
@@ -280,7 +380,7 @@ export default function App() {
   }
 
   function startNewSeason() {
-    setGame((previous) => createNewGame(previous.seasonNumber + 1, previous.userTactic));
+    setGame((previous) => createNewGame(previous.clubProfile, previous.seasonNumber + 1, previous.userTactic));
     setSaveStatus("");
     setErrorMessage("");
     setActiveTab("dashboard");
@@ -294,6 +394,36 @@ export default function App() {
         [key]: value,
       },
     }));
+  }
+
+  function updateClubDraft<Key extends keyof ClubProfile>(key: Key, value: ClubProfile[Key]) {
+    setClubDraft((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  }
+
+  function handleCreateClub(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa creezi clubul.");
+      return;
+    }
+
+    const normalizedClubProfile = normalizeClubProfile(clubDraft);
+    if (normalizedClubProfile.name.length < 2) {
+      setErrorMessage("Numele clubului trebuie sa aiba minimum 2 caractere.");
+      setSaveStatus("");
+      return;
+    }
+
+    const nextGame = createNewGame(normalizedClubProfile, 1, defaultUserTactic);
+    setGame(nextGame);
+    saveToLocalStorage(authSession.user.id, getSavePayload(nextGame, authSession.user.id));
+    setClubSetupRequired(false);
+    setActiveTab("dashboard");
+    setTemporaryStatus("Club creat si salvat local pentru contul tau.");
   }
 
   function openMatch(fixtureId: string) {
@@ -330,6 +460,7 @@ export default function App() {
     }
 
     setGame(gameFromPayload(payload));
+    setClubSetupRequired(false);
     setTemporaryStatus("Progres incarcat local pentru contul tau.");
   }
 
@@ -376,6 +507,7 @@ export default function App() {
       }
 
       setGame(gameFromPayload(payload));
+      setClubSetupRequired(false);
       setTemporaryStatus("Progres incarcat din Supabase pentru contul tau.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Nu am putut incarca din Supabase.");
@@ -462,6 +594,92 @@ export default function App() {
     );
   }
 
+  if (clubSetupRequired) {
+    return (
+      <main className="page auth-page">
+        <section className="auth-shell panel club-setup-shell">
+          <div>
+            <p className="eyebrow">Football Manager Lite</p>
+            <h1>Creeaza clubul tau</h1>
+            <p className="description">
+              Acest club va fi legat de contul tau si va inlocui echipa default in lot, program, meciuri si clasament.
+            </p>
+          </div>
+
+          <form className="auth-form club-form" onSubmit={handleCreateClub}>
+            <label>
+              Nume club
+              <input
+                type="text"
+                value={clubDraft.name}
+                onChange={(event) => updateClubDraft("name", event.target.value)}
+                placeholder="Ex: Rapid Voluntari"
+                minLength={2}
+                maxLength={40}
+                required
+              />
+            </label>
+
+            <label>
+              Oras
+              <input
+                type="text"
+                value={clubDraft.city}
+                onChange={(event) => updateClubDraft("city", event.target.value)}
+                placeholder="Ex: Bucuresti"
+                maxLength={40}
+              />
+            </label>
+
+            <div className="color-grid">
+              <label>
+                Culoare principala
+                <input
+                  type="color"
+                  value={clubDraft.primaryColor}
+                  onChange={(event) => updateClubDraft("primaryColor", event.target.value)}
+                />
+              </label>
+
+              <label>
+                Culoare secundara
+                <input
+                  type="color"
+                  value={clubDraft.secondaryColor}
+                  onChange={(event) => updateClubDraft("secondaryColor", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="club-preview-card">
+              <div className="club-badge-preview" style={{ background: clubDraft.primaryColor, color: clubDraft.secondaryColor }}>
+                {(clubDraft.name.trim()[0] || "F").toUpperCase()}
+              </div>
+              <div>
+                <strong>{clubDraft.name.trim() || "Numele clubului"}</strong>
+                <span>{clubDraft.city.trim() || "Oras necompletat"}</span>
+              </div>
+            </div>
+
+            <button type="submit">Creeaza club si incepe sezonul</button>
+
+            <div className="save-actions setup-actions">
+              <button type="button" className="secondary-button" onClick={handleLoadLocal}>Incarca salvare locala</button>
+              <button type="button" className="secondary-button" onClick={handleLoadSupabase} disabled={!isSupabaseConfigured()}>Incarca din Supabase</button>
+              <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+            </div>
+
+            <p className="muted small-note">
+              Daca ai deja o salvare in cloud, foloseste incarcarea din Supabase inainte sa creezi un club nou.
+            </p>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="page">
       <section className="hero">
@@ -496,12 +714,17 @@ export default function App() {
         <section className="dashboard-grid">
           <article className="panel highlight-panel">
             <span className="team-label">Sezon {game.seasonNumber}</span>
-            <h2>Clubul tau: {USER_CLUB_NAME}</h2>
+            <h2>Clubul tau: {game.clubProfile.name}</h2>
             <p className="muted">
               {seasonFinished
                 ? `Sezon terminat. Campioana: ${champion?.teamName}.`
                 : `Urmeaza runda ${game.currentRound} din ${maxRound}.`}
             </p>
+            <div className="club-identity-strip">
+              <span className="club-color-dot" style={{ background: game.clubProfile.primaryColor }} />
+              <span className="club-color-dot" style={{ background: game.clubProfile.secondaryColor }} />
+              <strong>{game.clubProfile.city}</strong>
+            </div>
             <div className="metric-grid">
               <div className="metric"><span>Pozitie</span><strong>{userClubPosition}</strong></div>
               <div className="metric"><span>Puncte</span><strong>{userStanding.points}</strong></div>
