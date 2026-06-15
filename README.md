@@ -173,3 +173,14 @@ This archive includes a robust `netlify.toml` that clears Netlify's potentially 
 ```
 
 After pushing this version, trigger **Clear cache and deploy site** in Netlify.
+
+
+## Netlify fast build mode
+
+This version uses the normal Netlify build command:
+
+```bash
+npm run build
+```
+
+The previous aggressive Netlify command was only needed to fix a corrupted dependency cache. Now that the deploy works, use `Deploy project` normally. Use `Deploy project without cache` only if dependency errors return.

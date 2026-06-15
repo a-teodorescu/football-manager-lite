@@ -1,6 +1,5 @@
 [build]
-  # Robust Netlify build: clear any corrupted cached node_modules, install from public npm registry, then build with Vite.
-  command = "rm -rf node_modules package-lock.json && npm install --include=dev --registry=https://registry.npmjs.org/ --no-audit --no-fund && npx --yes vite@5.4.14 build"
+  command = "npm run build"
   publish = "dist"
 
 [build.environment]
