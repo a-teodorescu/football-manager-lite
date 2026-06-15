@@ -289,3 +289,19 @@ Functii care pot fi adaugate dupa MVP:
 - marketplace;
 - aplicatie mobila nativa;
 - animatii 2D.
+
+---
+
+## 13. Current Browser MVP v0.4.0
+
+The browser MVP now includes:
+
+- Squad page for FC Bucuresti;
+- Tactics page for formation, mentality and pressing;
+- round-by-round simulation;
+- standings updated after every round;
+- fixtures that remain scheduled until simulated;
+- local save/load with LocalStorage;
+- optional Supabase save/load using a minimal `manager_saves` table.
+
+The next major gameplay step is manual lineup selection.

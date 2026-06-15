@@ -1,8 +1,8 @@
 {
   "name": "football-manager-lite",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "A browser/mobile football management simulator prototype with league simulation, standings, fixtures, and deterministic TypeScript match engine.",
+  "description": "A browser/mobile football management simulator prototype with squad, tactics, round-by-round league simulation, standings, and optional Supabase saves.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,14 +14,14 @@
     "season": "tsx src/engine/testSeason.ts"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
-    "tsx": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.14",
+    "typescript": "5.7.2",
+    "tsx": "4.19.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@types/node": "20.17.10",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5"
   }
 }
