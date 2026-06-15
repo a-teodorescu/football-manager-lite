@@ -1,31 +1,64 @@
--- Football Manager Lite - minimal save table for the browser MVP.
--- Run this in Supabase SQL Editor before enabling cloud saves.
+-- Football Manager Lite v0.5 - authenticated per-user save table.
+-- Run this in Supabase SQL Editor after enabling Supabase Auth.
+-- Each authenticated user can read/write only their own save through auth.uid().
 
 create table if not exists public.manager_saves (
-  manager_id text primary key,
+  manager_id uuid primary key references auth.users(id) on delete cascade,
   payload jsonb not null,
   updated_at timestamptz not null default now()
 );
 
+-- Upgrade helper for the old demo schema where manager_id was text.
+-- It removes old non-UUID demo rows and converts UUID-looking text ids to uuid.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'manager_saves'
+      and column_name = 'manager_id'
+      and udt_name <> 'uuid'
+  ) then
+    execute 'delete from public.manager_saves where manager_id !~* ''^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$''';
+    execute 'alter table public.manager_saves alter column manager_id type uuid using manager_id::uuid';
+  end if;
+end $$;
+
 alter table public.manager_saves enable row level security;
 
--- MVP policy: allows anonymous demo saves.
--- Later, when we add Supabase Auth, we will replace this with user-based policies.
+-- Remove old demo policies if they exist.
 drop policy if exists "Allow demo manager save reads" on public.manager_saves;
-create policy "Allow demo manager save reads"
+drop policy if exists "Allow demo manager save upserts" on public.manager_saves;
+drop policy if exists "Allow demo manager save updates" on public.manager_saves;
+
+-- Replace previous authenticated policies if re-running this file.
+drop policy if exists "Users can read own manager save" on public.manager_saves;
+drop policy if exists "Users can insert own manager save" on public.manager_saves;
+drop policy if exists "Users can update own manager save" on public.manager_saves;
+drop policy if exists "Users can delete own manager save" on public.manager_saves;
+
+create policy "Users can read own manager save"
   on public.manager_saves
   for select
-  using (manager_id = 'local-demo-manager');
+  to authenticated
+  using (manager_id = auth.uid());
 
-drop policy if exists "Allow demo manager save upserts" on public.manager_saves;
-create policy "Allow demo manager save upserts"
+create policy "Users can insert own manager save"
   on public.manager_saves
   for insert
-  with check (manager_id = 'local-demo-manager');
+  to authenticated
+  with check (manager_id = auth.uid());
 
-drop policy if exists "Allow demo manager save updates" on public.manager_saves;
-create policy "Allow demo manager save updates"
+create policy "Users can update own manager save"
   on public.manager_saves
   for update
-  using (manager_id = 'local-demo-manager')
-  with check (manager_id = 'local-demo-manager');
+  to authenticated
+  using (manager_id = auth.uid())
+  with check (manager_id = auth.uid());
+
+create policy "Users can delete own manager save"
+  on public.manager_saves
+  for delete
+  to authenticated
+  using (manager_id = auth.uid());

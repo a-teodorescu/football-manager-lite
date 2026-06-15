@@ -2,12 +2,14 @@
 
 Browser/mobile football management simulator prototype.
 
-Current version: `0.4.0`
+Current version: `0.5.0`
 
 ## What is included now
 
 - React + Vite browser interface
 - Deterministic TypeScript match engine
+- Supabase Auth with email/password register, login and logout
+- Per-user saves using Supabase Auth `user.id`
 - 8 mock teams
 - 14 rounds
 - 56 fixtures
@@ -17,8 +19,8 @@ Current version: `0.4.0`
 - user tactic affects future FC Bucuresti matches
 - standings update after every simulated round
 - match report with stats and timeline
-- local save/load with LocalStorage
-- optional Supabase save/load using REST API
+- local save/load scoped per authenticated user
+- Supabase save/load scoped per authenticated user with RLS
 - Netlify-ready config
 
 ## Local setup
@@ -51,13 +53,18 @@ The project includes `netlify.toml`:
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_CONFIG_PRODUCTION = "false"
+  NPM_FLAGS = "--include=dev"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 ```
 
-Netlify settings:
+Required Netlify settings:
 
 ```txt
 Build command: npm run build
@@ -78,41 +85,35 @@ npm run check     # TypeScript check
 
 ## Browser flow
 
-1. Open Dashboard.
-2. Go to Squad to inspect FC Bucuresti players.
-3. Go to Tactics and change formation, mentality or pressing.
-4. Click `Simuleaza etapa` to play the next round.
-5. Check Program, Meci curent and Clasament.
-6. Use local save/load or configure Supabase for cloud save.
+1. Register or login with email/password.
+2. Open Dashboard.
+3. Go to Squad to inspect FC Bucuresti players.
+4. Go to Tactics and change formation, mentality or pressing.
+5. Click `Simuleaza etapa` to play the next round.
+6. Check Program, Meci curent and Clasament.
+7. Save locally or save to Supabase; both are scoped to the authenticated user.
 
-## Supabase save setup
-
-LocalStorage works immediately. Supabase is optional.
+## Supabase setup
 
 1. Create a Supabase project.
-2. Open Supabase SQL Editor.
-3. Run the SQL file from:
+2. In Authentication, keep email/password enabled.
+3. Open Supabase SQL Editor.
+4. Run the SQL file from:
 
 ```txt
 supabase/schema.sql
 ```
 
-4. Add these environment variables locally in `.env` or in Netlify Environment Variables:
+5. Add these environment variables locally in `.env` or in Netlify Environment Variables:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-5. Redeploy Netlify.
+6. Redeploy Netlify.
 
-Current Supabase save is intentionally simple and uses a demo manager id:
-
-```txt
-local-demo-manager
-```
-
-Later, when we add Supabase Auth, this will become one save per authenticated user.
+The app uses Supabase Auth REST endpoints and the authenticated access token for saving/loading. The `manager_saves.manager_id` value is always the current `user.id`, and RLS allows each user to access only their own row.
 
 ## Project structure
 
@@ -134,6 +135,7 @@ src/
     simulationBatchTest.ts
     testSeason.ts
   lib/
+    authService.ts
     saveService.ts
 supabase/
   schema.sql
@@ -147,34 +149,6 @@ supabase/
 4. Add injuries and suspensions.
 5. Move official match simulation server-side for anti-cheat.
 
-
-## Netlify install fix
-
-This archive intentionally does not include `package-lock.json`. The previous lockfile was generated in a restricted environment and could cause Netlify npm installs to fail with missing CLI binaries such as `vite: not found`. Netlify should generate a fresh lock/install from the public npm registry.
-
-Committed `.npmrc` forces the public npm registry:
-
-```txt
-registry=https://registry.npmjs.org/
-fund=false
-audit=false
-```
-
-If Netlify still uses a cached broken install, run: Deploys -> Trigger deploy -> Clear cache and deploy site.
-
-## Netlify deploy fix used in this ZIP
-
-This archive includes a robust `netlify.toml` that clears Netlify's potentially corrupted `node_modules` cache during the build, reinstalls packages from the public npm registry, and then runs Vite:
-
-```toml
-[build]
-  command = "rm -rf node_modules package-lock.json && npm install --include=dev --registry=https://registry.npmjs.org/ --no-audit --no-fund && npx --yes vite@5.4.14 build"
-  publish = "dist"
-```
-
-After pushing this version, trigger **Clear cache and deploy site** in Netlify.
-
-
 ## Netlify fast build mode
 
 This version uses the normal Netlify build command:
@@ -183,4 +157,4 @@ This version uses the normal Netlify build command:
 npm run build
 ```
 
-The previous aggressive Netlify command was only needed to fix a corrupted dependency cache. Now that the deploy works, use `Deploy project` normally. Use `Deploy project without cache` only if dependency errors return.
+The archive intentionally does not include `node_modules`, `dist`, `.git`, `.vite` or `package-lock.json`.

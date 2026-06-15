@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { Fixture } from "./engine/fixtureGenerator";
 import {
   FixtureResult,
@@ -16,18 +16,25 @@ import { generateFixtures } from "./engine/fixtureGenerator";
 import {
   ManagerSavePayload,
   clearLocalStorageSave,
-  getDemoManagerId,
   isSupabaseConfigured,
   loadFromLocalStorage,
   loadFromSupabase,
   saveToLocalStorage,
   saveToSupabase,
 } from "./lib/saveService";
+import {
+  AuthSession,
+  getStoredAuthSession,
+  loginWithEmail,
+  logoutFromSupabase,
+  registerWithEmail,
+} from "./lib/authService";
 
 const USER_CLUB_NAME = "FC Bucuresti";
 
 type Tab = "dashboard" | "squad" | "tactics" | "match" | "fixtures" | "standings";
-type SaveStatus = "" | "Salvat local." | "Progres incarcat local." | "Salvat in Supabase." | "Progres incarcat din Supabase." | "Salvarea locala a fost stearsa.";
+type SaveStatus = string;
+type AuthMode = "login" | "register";
 
 interface GameState {
   seasonNumber: number;
@@ -76,10 +83,10 @@ function getUserTeam(teams: Team[]): Team {
   return team;
 }
 
-function getSavePayload(game: GameState): ManagerSavePayload {
+function getSavePayload(game: GameState, managerId: string): ManagerSavePayload {
   return {
     version: 1,
-    managerId: getDemoManagerId(),
+    managerId,
     seasonNumber: game.seasonNumber,
     currentRound: game.currentRound,
     userTactic: game.userTactic,
@@ -109,8 +116,23 @@ function getTacticLabel(tactic: Tactic): string {
   return `${tactic.formation} / ${tactic.mentality} / ${tactic.pressing}`;
 }
 
+function createInitialGameFromStoredSession(): GameState {
+  const storedSession = getStoredAuthSession();
+  if (!storedSession) return createNewGame();
+
+  const localPayload = loadFromLocalStorage(storedSession.user.id);
+  return localPayload ? gameFromPayload(localPayload) : createNewGame();
+}
+
 export default function App() {
-  const [game, setGame] = useState<GameState>(() => loadFromLocalStorage() ? gameFromPayload(loadFromLocalStorage()!) : createNewGame());
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [game, setGame] = useState<GameState>(() => createInitialGameFromStoredSession());
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -136,6 +158,57 @@ export default function App() {
   function setTemporaryStatus(status: SaveStatus) {
     setSaveStatus(status);
     setErrorMessage("");
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthLoading(true);
+    setAuthStatus("");
+    setAuthError("");
+
+    try {
+      if (authPassword.length < 6) {
+        throw new Error("Parola trebuie sa aiba minimum 6 caractere.");
+      }
+
+      if (authMode === "register") {
+        const result = await registerWithEmail(authEmail.trim(), authPassword);
+        setAuthStatus(result.message);
+
+        if (result.session) {
+          setAuthSession(result.session);
+          const localPayload = loadFromLocalStorage(result.session.user.id);
+          setGame(localPayload ? gameFromPayload(localPayload) : createNewGame());
+        }
+      } else {
+        const session = await loginWithEmail(authEmail.trim(), authPassword);
+        setAuthSession(session);
+        const localPayload = loadFromLocalStorage(session.user.id);
+        setGame(localPayload ? gameFromPayload(localPayload) : createNewGame());
+        setAuthStatus("Login reusit.");
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Autentificarea a esuat.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    if (!authSession) return;
+
+    try {
+      await logoutFromSupabase(authSession.accessToken);
+    } catch {
+      // Local session is cleared by logoutFromSupabase even if the network call fails.
+    } finally {
+      setAuthSession(null);
+      setGame(createNewGame());
+      setSaveStatus("");
+      setErrorMessage("");
+      setAuthPassword("");
+      setActiveTab("dashboard");
+    }
   }
 
   function simulateNextRound() {
@@ -232,31 +305,55 @@ export default function App() {
   }
 
   function handleSaveLocal() {
-    saveToLocalStorage(getSavePayload(game));
-    setTemporaryStatus("Salvat local.");
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa salvezi progresul.");
+      setSaveStatus("");
+      return;
+    }
+
+    saveToLocalStorage(authSession.user.id, getSavePayload(game, authSession.user.id));
+    setTemporaryStatus("Salvat local pentru contul tau.");
   }
 
   function handleLoadLocal() {
-    const payload = loadFromLocalStorage();
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa incarci progresul.");
+      setSaveStatus("");
+      return;
+    }
+
+    const payload = loadFromLocalStorage(authSession.user.id);
     if (!payload) {
-      setErrorMessage("Nu exista inca o salvare locala.");
+      setErrorMessage("Nu exista inca o salvare locala pentru acest user.");
       setSaveStatus("");
       return;
     }
 
     setGame(gameFromPayload(payload));
-    setTemporaryStatus("Progres incarcat local.");
+    setTemporaryStatus("Progres incarcat local pentru contul tau.");
   }
 
   function handleClearLocal() {
-    clearLocalStorageSave();
-    setTemporaryStatus("Salvarea locala a fost stearsa.");
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa stergi salvarea locala.");
+      setSaveStatus("");
+      return;
+    }
+
+    clearLocalStorageSave(authSession.user.id);
+    setTemporaryStatus("Salvarea locala pentru contul tau a fost stearsa.");
   }
 
   async function handleSaveSupabase() {
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa salvezi in Supabase.");
+      setSaveStatus("");
+      return;
+    }
+
     try {
-      await saveToSupabase(getSavePayload(game));
-      setTemporaryStatus("Salvat in Supabase.");
+      await saveToSupabase(authSession.user.id, authSession.accessToken, getSavePayload(game, authSession.user.id));
+      setTemporaryStatus("Salvat in Supabase pentru contul tau.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Nu am putut salva in Supabase.");
       setSaveStatus("");
@@ -264,16 +361,22 @@ export default function App() {
   }
 
   async function handleLoadSupabase() {
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa incarci din Supabase.");
+      setSaveStatus("");
+      return;
+    }
+
     try {
-      const payload = await loadFromSupabase();
+      const payload = await loadFromSupabase(authSession.user.id, authSession.accessToken);
       if (!payload) {
-        setErrorMessage("Nu exista salvare in Supabase pentru demo manager.");
+        setErrorMessage("Nu exista salvare in Supabase pentru acest user.");
         setSaveStatus("");
         return;
       }
 
       setGame(gameFromPayload(payload));
-      setTemporaryStatus("Progres incarcat din Supabase.");
+      setTemporaryStatus("Progres incarcat din Supabase pentru contul tau.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Nu am putut incarca din Supabase.");
       setSaveStatus("");
@@ -283,6 +386,82 @@ export default function App() {
   const nextRoundFixtures = seasonFinished ? [] : getRoundFixtures(game.fixtures, game.currentRound);
   const champion = seasonFinished ? game.standings[0] : undefined;
 
+  if (!authSession) {
+    return (
+      <main className="page auth-page">
+        <section className="auth-shell panel">
+          <div>
+            <p className="eyebrow">Football Manager Lite</p>
+            <h1>Manager Career</h1>
+            <p className="description">
+              Creeaza cont sau intra in cont ca salvarea sa fie separata pentru fiecare manager.
+            </p>
+          </div>
+
+          <form className="auth-form" onSubmit={handleAuthSubmit}>
+            <div className="auth-mode-switch" aria-label="Auth mode">
+              <button
+                type="button"
+                className={authMode === "login" ? "tab active" : "tab"}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthStatus("");
+                  setAuthError("");
+                }}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                className={authMode === "register" ? "tab active" : "tab"}
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthStatus("");
+                  setAuthError("");
+                }}
+              >
+                Register
+              </button>
+            </div>
+
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                placeholder="manager@email.com"
+                required
+              />
+            </label>
+
+            <label>
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                placeholder="minimum 6 caractere"
+                required
+                minLength={6}
+              />
+            </label>
+
+            <button type="submit" disabled={!isSupabaseConfigured() || authLoading}>
+              {authLoading ? "Se proceseaza..." : authMode === "login" ? "Login" : "Create account"}
+            </button>
+
+            <p className="muted small-note">
+              Supabase Auth {isSupabaseConfigured() ? "este configurat" : "nu este configurat"}. Ai nevoie de VITE_SUPABASE_URL si VITE_SUPABASE_ANON_KEY in Netlify.
+            </p>
+            {authStatus && <p className="success-message">{authStatus}</p>}
+            {authError && <p className="error-message">{authError}</p>}
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="page">
       <section className="hero">
@@ -290,12 +469,17 @@ export default function App() {
           <p className="eyebrow">Football Manager Lite</p>
           <h1>Manager Career</h1>
           <p className="description">
-            Acum jocul ruleaza etapa cu etapa in browser. Vezi lotul, setezi tactica, simulezi runde si salvezi progresul local sau in Supabase.
+            Acum jocul ruleaza etapa cu etapa in browser. Vezi lotul, setezi tactica, simulezi runde si salvezi progresul pe contul tau.
           </p>
         </div>
         <div className="hero-actions">
+          <div className="user-panel">
+            <span>Logat ca</span>
+            <strong>{authSession.user.email ?? authSession.user.id}</strong>
+          </div>
           <button onClick={simulateNextRound} disabled={seasonFinished}>Simuleaza etapa</button>
           <button className="secondary-button compact" onClick={startNewSeason}>Sezon nou</button>
+          <button className="secondary-button compact" onClick={handleLogout}>Logout</button>
         </div>
       </section>
 
@@ -362,7 +546,7 @@ export default function App() {
             <div className="section-header">
               <div>
                 <h3>Salvare progres</h3>
-                <p className="muted">LocalStorage merge imediat. Supabase merge dupa ce adaugi URL/key in Netlify si rulezi schema SQL inclusa.</p>
+                <p className="muted">Salvarea locala si salvarea Supabase sunt legate de user.id din Supabase Auth.</p>
               </div>
               <span className={isSupabaseConfigured() ? "status-pill ok" : "status-pill"}>
                 Supabase {isSupabaseConfigured() ? "configurat" : "neconfigurat"}
@@ -442,7 +626,7 @@ export default function App() {
           <article className="panel highlight-panel">
             <span className="team-label">Tactica activa</span>
             <h2>{getTacticLabel(game.userTactic)}</h2>
-            <p className="muted">Modificarile se aplica meciurilor viitoare ale lui FC Bucuresti. Meciurile deja jucate nu se recalculeaza.</p>
+            <p className="muted">Modificarile se aplica meciurilor viitoare ale clubului tau. Meciurile deja jucate nu se recalculeaza.</p>
             <div className="tactic-form">
               <label>
                 Formation

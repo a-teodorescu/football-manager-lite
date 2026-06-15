@@ -1,8 +1,8 @@
 {
   "name": "football-manager-lite",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "A browser/mobile football management simulator prototype with squad, tactics, round-by-round league simulation, standings, and optional Supabase saves.",
+  "description": "A browser/mobile football management simulator prototype with Supabase Auth, per-user saves, squad, tactics, season simulation, and standings.",
   "type": "module",
   "scripts": {
     "dev": "vite",

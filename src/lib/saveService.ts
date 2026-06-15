@@ -17,8 +17,7 @@ export interface ManagerSavePayload {
   updatedAt: string;
 }
 
-const LOCAL_SAVE_KEY = "football-manager-lite-save-v1";
-const DEMO_MANAGER_ID = "local-demo-manager";
+const LOCAL_SAVE_KEY_PREFIX = "football-manager-lite-save-v1";
 
 function getSupabaseUrl(): string | undefined {
   return import.meta.env.VITE_SUPABASE_URL;
@@ -28,35 +27,35 @@ function getSupabaseAnonKey(): string | undefined {
   return import.meta.env.VITE_SUPABASE_ANON_KEY;
 }
 
-export function getDemoManagerId(): string {
-  return DEMO_MANAGER_ID;
+function getLocalSaveKey(userId: string): string {
+  return `${LOCAL_SAVE_KEY_PREFIX}:${userId}`;
 }
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
 
-export function saveToLocalStorage(payload: ManagerSavePayload): void {
-  localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(payload));
+export function saveToLocalStorage(userId: string, payload: ManagerSavePayload): void {
+  localStorage.setItem(getLocalSaveKey(userId), JSON.stringify(payload));
 }
 
-export function loadFromLocalStorage(): ManagerSavePayload | null {
-  const raw = localStorage.getItem(LOCAL_SAVE_KEY);
+export function loadFromLocalStorage(userId: string): ManagerSavePayload | null {
+  const raw = localStorage.getItem(getLocalSaveKey(userId));
   if (!raw) return null;
 
   try {
     return JSON.parse(raw) as ManagerSavePayload;
   } catch {
-    localStorage.removeItem(LOCAL_SAVE_KEY);
+    localStorage.removeItem(getLocalSaveKey(userId));
     return null;
   }
 }
 
-export function clearLocalStorageSave(): void {
-  localStorage.removeItem(LOCAL_SAVE_KEY);
+export function clearLocalStorageSave(userId: string): void {
+  localStorage.removeItem(getLocalSaveKey(userId));
 }
 
-export async function saveToSupabase(payload: ManagerSavePayload): Promise<void> {
+export async function saveToSupabase(userId: string, accessToken: string, payload: ManagerSavePayload): Promise<void> {
   const supabaseUrl = getSupabaseUrl();
   const supabaseAnonKey = getSupabaseAnonKey();
 
@@ -70,13 +69,16 @@ export async function saveToSupabase(payload: ManagerSavePayload): Promise<void>
       method: "POST",
       headers: {
         apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=minimal",
       },
       body: JSON.stringify({
-        manager_id: payload.managerId,
-        payload,
+        manager_id: userId,
+        payload: {
+          ...payload,
+          managerId: userId,
+        },
         updated_at: payload.updatedAt,
       }),
     }
@@ -88,7 +90,7 @@ export async function saveToSupabase(payload: ManagerSavePayload): Promise<void>
   }
 }
 
-export async function loadFromSupabase(managerId = DEMO_MANAGER_ID): Promise<ManagerSavePayload | null> {
+export async function loadFromSupabase(userId: string, accessToken: string): Promise<ManagerSavePayload | null> {
   const supabaseUrl = getSupabaseUrl();
   const supabaseAnonKey = getSupabaseAnonKey();
 
@@ -97,12 +99,12 @@ export async function loadFromSupabase(managerId = DEMO_MANAGER_ID): Promise<Man
   }
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/manager_saves?manager_id=eq.${encodeURIComponent(managerId)}&select=payload&limit=1`,
+    `${supabaseUrl}/rest/v1/manager_saves?manager_id=eq.${encodeURIComponent(userId)}&select=payload&limit=1`,
     {
       method: "GET",
       headers: {
         apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     }
   );
@@ -113,5 +115,7 @@ export async function loadFromSupabase(managerId = DEMO_MANAGER_ID): Promise<Man
   }
 
   const rows = (await response.json()) as Array<{ payload: ManagerSavePayload }>;
-  return rows[0]?.payload ?? null;
+  const payload = rows[0]?.payload ?? null;
+
+  return payload ? { ...payload, managerId: userId } : null;
 }
