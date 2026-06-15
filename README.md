@@ -1,71 +1,70 @@
 # Football Manager Lite
 
-Primul prototip pentru un browser/mobile football management simulator.
+Browser/mobile football management simulator prototype.
 
-Proiectul contine:
+Current version: `0.3.0`
 
-- match engine determinist in TypeScript;
-- simulator de meci in browser cu React + Vite;
-- script CLI pentru un meci simplu;
-- script CLI pentru batch test pe 1000 de meciuri;
-- configuratie Netlify.
+## What is included now
 
-## Rulare locala
+- React + Vite browser interface
+- Deterministic TypeScript match engine
+- One-match simulation
+- Full league simulation in browser
+- 8 mock teams
+- 14 rounds
+- 56 fixtures
+- automatic standings
+- match report with stats and timeline
+- Netlify-ready config
+
+## Local setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-Apoi deschide URL-ul afisat in terminal, de obicei:
+Open the local URL shown by Vite, usually:
 
-```bash
+```txt
 http://localhost:5173
 ```
 
-## Rulare engine in terminal
-
-Un meci simplu:
-
-```bash
-npm run simulate
-```
-
-Batch test:
-
-```bash
-npm run batch
-```
-
-## Build pentru productie
+## Production build
 
 ```bash
 npm run build
-npm run preview
 ```
 
-## Deploy pe Netlify
+Vite will create the `dist` folder.
 
-Setarile sunt deja incluse in `netlify.toml`:
+## Netlify settings
+
+The project includes `netlify.toml`:
 
 ```toml
 [build]
   command = "npm run build"
   publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 ```
 
-Pasi:
+## Useful scripts
 
-1. Creeaza un repository nou pe GitHub.
-2. Urca fisierele din acest proiect.
-3. In Netlify: Add new project > Import from Git.
-4. Alege repository-ul.
-5. Netlify ar trebui sa detecteze Vite automat.
-6. Build command: `npm run build`.
-7. Publish directory: `dist`.
-8. Deploy.
+```bash
+npm run dev       # start browser app locally
+npm run build     # production build
+npm run simulate  # simulate one match in terminal
+npm run batch     # run 1000 match simulations in terminal
+npm run season    # simulate a full season in terminal
+npm run check     # TypeScript check
+```
 
-## Structura principala
+## Project structure
 
 ```txt
 src/
@@ -77,11 +76,20 @@ src/
     random.ts
     teamStrength.ts
     matchEngine.ts
+    fixtureGenerator.ts
+    standings.ts
+    leagueSimulation.ts
     mockData.ts
     testSimulation.ts
     simulationBatchTest.ts
+    testSeason.ts
 ```
 
-## Observatie importanta
+## Next planned steps
 
-Momentan engine-ul ruleaza in browser pentru demo. Mai tarziu, pentru varianta reala cu useri, rezultate si anti-cheat, simularea meciurilor trebuie mutata server-side, in Supabase Edge Functions sau Netlify Functions.
+1. Add club creation screen.
+2. Add squad page.
+3. Add tactics page.
+4. Allow the user to change formation, mentality and pressing before simulation.
+5. Move persistent data to Supabase.
+6. Later, move official match simulation server-side for anti-cheat.
