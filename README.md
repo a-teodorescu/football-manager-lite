@@ -161,3 +161,15 @@ audit=false
 ```
 
 If Netlify still uses a cached broken install, run: Deploys -> Trigger deploy -> Clear cache and deploy site.
+
+## Netlify deploy fix used in this ZIP
+
+This archive includes a robust `netlify.toml` that clears Netlify's potentially corrupted `node_modules` cache during the build, reinstalls packages from the public npm registry, and then runs Vite:
+
+```toml
+[build]
+  command = "rm -rf node_modules package-lock.json && npm install --include=dev --registry=https://registry.npmjs.org/ --no-audit --no-fund && npx --yes vite@5.4.14 build"
+  publish = "dist"
+```
+
+After pushing this version, trigger **Clear cache and deploy site** in Netlify.
