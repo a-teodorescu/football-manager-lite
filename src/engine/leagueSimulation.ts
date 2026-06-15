@@ -1,6 +1,7 @@
 import { Fixture, generateFixtures } from "./fixtureGenerator";
 import { simulateMatch } from "./matchEngine";
 import { createMockTeam } from "./mockData";
+import { applyRoundStatusEffects, normalizeTeamStatus, type RoundStatusReport } from "./playerStatus";
 import { createInitialStandings, StandingRow, updateStandings } from "./standings";
 import { MatchResult, Tactic, Team } from "./types";
 
@@ -14,6 +15,7 @@ export interface SeasonSimulationResult {
   fixtures: Fixture[];
   results: FixtureResult[];
   standings: StandingRow[];
+  statusHistory: RoundStatusReport[];
 }
 
 export const USER_TEAM_ID = "team-1";
@@ -59,11 +61,32 @@ export function createMockLeagueTeams(): Team[] {
     createMockTeam("team-6", "Brasov Wolves", 68),
     createMockTeam("team-7", "Constanta Stars", 71),
     createMockTeam("team-8", "Iasi City", 67),
-  ];
+  ].map(normalizeTeamStatus);
 }
 
 export function getMaxRound(fixtures: Fixture[]): number {
   return fixtures.reduce((max, fixture) => Math.max(max, fixture.round), 0);
+}
+
+function createTeamLookup(teams: Team[]): Map<string, Team> {
+  return new Map(teams.map((team) => [team.id, normalizeTeamStatus(team)]));
+}
+
+function hydrateFixtureWithTeams(fixture: Fixture, teamsById: Map<string, Team>): Fixture {
+  return {
+    ...fixture,
+    homeTeam: teamsById.get(fixture.homeTeam.id) ?? fixture.homeTeam,
+    awayTeam: teamsById.get(fixture.awayTeam.id) ?? fixture.awayTeam,
+  };
+}
+
+function hydrateFutureFixtures(fixtures: Fixture[], teams: Team[]): Fixture[] {
+  const teamsById = createTeamLookup(teams);
+
+  return fixtures.map((fixture) => {
+    if (fixture.played) return fixture;
+    return hydrateFixtureWithTeams(fixture, teamsById);
+  });
 }
 
 export function simulateFixture(
@@ -90,17 +113,28 @@ export function simulateRound(
   standings: StandingRow[],
   currentRound: number,
   seasonNumber: number,
-  userTactic: Tactic
+  userTactic: Tactic,
+  teams?: Team[]
 ): {
   roundResults: FixtureResult[];
   updatedFixtures: Fixture[];
   updatedStandings: StandingRow[];
+  updatedTeams: Team[];
+  statusReport: RoundStatusReport;
 } {
   let nextStandings = standings;
+  const baseTeams = teams?.length
+    ? teams.map(normalizeTeamStatus)
+    : Array.from(
+        new Map(
+          fixtures.flatMap((fixture) => [fixture.homeTeam, fixture.awayTeam]).map((team) => [team.id, normalizeTeamStatus(team)])
+        ).values()
+      );
+  const baseTeamsById = createTeamLookup(baseTeams);
 
-  const roundFixtures = fixtures.filter(
-    (fixture) => fixture.round === currentRound && !fixture.played
-  );
+  const roundFixtures = fixtures
+    .filter((fixture) => fixture.round === currentRound && !fixture.played)
+    .map((fixture) => hydrateFixtureWithTeams(fixture, baseTeamsById));
 
   const roundResults = roundFixtures.map((fixture) => {
     const item = simulateFixture(fixture, seasonNumber, userTactic);
@@ -108,15 +142,21 @@ export function simulateRound(
     return item;
   });
 
+  const status = applyRoundStatusEffects(baseTeams, roundResults, seasonNumber, currentRound);
   const playedFixtureIds = new Set(roundResults.map((item) => item.fixture.id));
-  const updatedFixtures = fixtures.map((fixture) =>
-    playedFixtureIds.has(fixture.id) ? { ...fixture, played: true } : fixture
+  const updatedFixtures = hydrateFutureFixtures(
+    fixtures.map((fixture) =>
+      playedFixtureIds.has(fixture.id) ? roundResults.find((item) => item.fixture.id === fixture.id)?.fixture ?? fixture : fixture
+    ),
+    status.teams
   );
 
   return {
     roundResults,
     updatedFixtures,
     updatedStandings: nextStandings,
+    updatedTeams: status.teams,
+    statusReport: status.report,
   };
 }
 
@@ -124,21 +164,27 @@ export function simulateFullSeason(
   seasonNumber = 1,
   userTactic: Tactic = defaultUserTactic
 ): SeasonSimulationResult {
-  const teams = createMockLeagueTeams();
-  const fixtures = generateFixtures(teams);
-
+  let teams = createMockLeagueTeams();
+  let fixtures = generateFixtures(teams);
   let standings = createInitialStandings(teams);
+  let results: FixtureResult[] = [];
+  const statusHistory: RoundStatusReport[] = [];
+  const finalRound = getMaxRound(fixtures);
 
-  const results = fixtures.map((fixture) => {
-    const item = simulateFixture(fixture, seasonNumber, userTactic);
-    standings = updateStandings(standings, item.result);
-    return item;
-  });
+  for (let round = 1; round <= finalRound; round += 1) {
+    const simulation = simulateRound(fixtures, standings, round, seasonNumber, userTactic, teams);
+    teams = simulation.updatedTeams;
+    fixtures = simulation.updatedFixtures;
+    standings = simulation.updatedStandings;
+    results = [...results, ...simulation.roundResults];
+    statusHistory.unshift(simulation.statusReport);
+  }
 
   return {
     teams,
-    fixtures: fixtures.map((fixture) => ({ ...fixture, played: true })),
+    fixtures,
     results,
     standings,
+    statusHistory,
   };
 }

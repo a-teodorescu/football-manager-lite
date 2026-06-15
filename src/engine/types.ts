@@ -6,7 +6,24 @@ export type Mentality = "defensive" | "balanced" | "attacking";
 
 export type Pressing = "low" | "medium" | "high";
 
+export type TrainingFocus = "balanced" | "attacking" | "defensive" | "fitness";
+
 export type MatchSide = "home" | "away" | "neutral";
+
+export type InjurySeverity = "minor" | "moderate";
+
+export interface PlayerInjury {
+  severity: InjurySeverity;
+  label: string;
+  roundsRemaining: number;
+}
+
+export interface PlayerContract {
+  wage: number;
+  signedSeason: number;
+  expiresSeason: number;
+  happiness: number;
+}
 
 export type MatchEventType =
   | "kickoff"
@@ -33,6 +50,10 @@ export interface Player {
   stamina: number;
   morale: number;
   form: number;
+  fitness?: number;
+  wage?: number;
+  contract?: PlayerContract;
+  injury?: PlayerInjury;
 }
 
 export interface Team {

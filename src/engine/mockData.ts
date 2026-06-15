@@ -51,6 +51,7 @@ function createPlayer(
     stamina: baseOverall + ((index * 5) % 8) - 3,
     morale: 70 + ((index * 7) % 20),
     form: 65 + ((index * 6) % 25),
+    fitness: 100,
   };
 }
 

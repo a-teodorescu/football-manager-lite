@@ -1,8 +1,8 @@
 {
   "name": "football-manager-lite",
-  "version": "0.6.0",
+  "version": "2.2.0",
   "private": true,
-  "description": "A browser/mobile football management simulator prototype with Supabase Auth, per-user saves, club creation, squad, tactics, season simulation, and standings.",
+  "description": "A browser/mobile football management simulator prototype with Supabase Auth, per-user saves, club creation, training, fitness, morale, injuries, transfers, finance, youth academy, multi-season progression, manager dashboard, matchday experience, contracts, scouting, cup competition, board objectives, help center, beta readiness, live QA stabilization, and admin/debug tools.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,22 @@
     "simulate": "tsx src/engine/testSimulation.ts",
     "batch": "tsx src/engine/simulationBatchTest.ts",
     "check": "tsc --noEmit",
-    "season": "tsx src/engine/testSeason.ts"
+    "season": "tsx src/engine/testSeason.ts",
+    "status": "tsx src/engine/testPlayerStatus.ts",
+    "transfers": "tsx src/engine/testTransferMarket.ts",
+    "finance": "tsx src/engine/testFinance.ts",
+    "academy": "tsx src/engine/testYouthAcademy.ts",
+    "progression": "tsx src/engine/testSeasonProgression.ts",
+    "dashboard": "tsx src/engine/testManagerDashboard.ts",
+    "matchday": "tsx src/engine/testMatchExperience.ts",
+    "contracts": "tsx src/engine/testContracts.ts",
+    "scouting": "tsx src/engine/testScouting.ts",
+    "cup": "tsx src/engine/testCupCompetition.ts",
+    "board": "tsx src/engine/testBoardObjectives.ts",
+    "ux": "tsx src/engine/testUiExperience.ts",
+    "beta": "tsx src/engine/testBetaReadiness.ts",
+    "qa": "tsx src/engine/testLiveDeployQa.ts",
+    "admin": "tsx src/engine/testAdminDebug.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "4.3.4",

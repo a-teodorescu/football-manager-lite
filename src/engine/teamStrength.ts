@@ -1,4 +1,5 @@
 import { Player, Tactic, Team, TeamStrength } from "./types";
+import { isPlayerInjured, normalizePlayerStatus } from "./playerStatus";
 
 function average(values: number[]): number {
   if (values.length === 0) return 50;
@@ -9,17 +10,30 @@ function getPlayersByPosition(players: Player[], position: Player["position"]): 
   return players.filter((player) => player.position === position);
 }
 
+function getAvailabilityModifier(player: Player): number {
+  const normalized = normalizePlayerStatus(player);
+  const fitness = normalized.fitness ?? 100;
+  const fitnessModifier = 0.82 + fitness / 500;
+  const injuryModifier = isPlayerInjured(normalized) ? 0.58 : 1;
+
+  return fitnessModifier * injuryModifier;
+}
+
 function calculatePlayerAttack(player: Player): number {
+  const availability = getAvailabilityModifier(player);
+
   return (
     player.shooting * 0.45 +
     player.pace * 0.2 +
     player.passing * 0.15 +
     player.morale * 0.1 +
     player.form * 0.1
-  );
+  ) * availability;
 }
 
 function calculatePlayerMidfield(player: Player): number {
+  const availability = getAvailabilityModifier(player);
+
   return (
     player.passing * 0.4 +
     player.stamina * 0.2 +
@@ -27,21 +41,25 @@ function calculatePlayerMidfield(player: Player): number {
     player.shooting * 0.1 +
     player.morale * 0.075 +
     player.form * 0.075
-  );
+  ) * availability;
 }
 
 function calculatePlayerDefense(player: Player): number {
+  const availability = getAvailabilityModifier(player);
+
   return (
     player.defending * 0.5 +
     player.pace * 0.15 +
     player.stamina * 0.15 +
     player.morale * 0.1 +
     player.form * 0.1
-  );
+  ) * availability;
 }
 
 function calculateGoalkeeper(player: Player | undefined): number {
   if (!player) return 50;
+
+  const availability = getAvailabilityModifier(player);
 
   return (
     player.overall * 0.55 +
@@ -49,7 +67,7 @@ function calculateGoalkeeper(player: Player | undefined): number {
     player.stamina * 0.1 +
     player.morale * 0.075 +
     player.form * 0.075
-  );
+  ) * availability;
 }
 
 function getFormationModifiers(tactic: Tactic) {
@@ -124,10 +142,14 @@ function getPressingModifiers(tactic: Tactic) {
 }
 
 export function calculateTeamStrength(team: Team, tactic: Tactic): TeamStrength {
-  const goalkeepers = getPlayersByPosition(team.players, "GK");
-  const defenders = getPlayersByPosition(team.players, "DEF");
-  const midfielders = getPlayersByPosition(team.players, "MID");
-  const attackers = getPlayersByPosition(team.players, "ATT");
+  const normalizedTeam = {
+    ...team,
+    players: team.players.map(normalizePlayerStatus),
+  };
+  const goalkeepers = getPlayersByPosition(normalizedTeam.players, "GK");
+  const defenders = getPlayersByPosition(normalizedTeam.players, "DEF");
+  const midfielders = getPlayersByPosition(normalizedTeam.players, "MID");
+  const attackers = getPlayersByPosition(normalizedTeam.players, "ATT");
 
   const goalkeeperStrength = calculateGoalkeeper(goalkeepers[0]);
 
@@ -139,8 +161,8 @@ export function calculateTeamStrength(team: Team, tactic: Tactic): TeamStrength 
   const mentality = getMentalityModifiers(tactic);
   const pressing = getPressingModifiers(tactic);
 
-  const teamMoraleModifier = 0.9 + team.morale / 500;
-  const reputationModifier = 0.95 + team.reputation / 1000;
+  const teamMoraleModifier = 0.9 + normalizedTeam.morale / 500;
+  const reputationModifier = 0.95 + normalizedTeam.reputation / 1000;
 
   const attack =
     (attackStrength * 0.7 + midfieldStrength * 0.25 + defenseStrength * 0.05) *
