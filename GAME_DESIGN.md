@@ -30,7 +30,6 @@ Prima versiune NU va include:
 - contracte complexe;
 - academie complexa cu echipe U19/U21;
 - sponsori negociabili;
-- stadion upgradabil;
 - multiplayer live;
 - animatii 2D;
 - aplicatie mobila nativa.
@@ -564,3 +563,110 @@ This release adds an operational Admin tab for live debugging. It does not modif
 Admin checks are derived from the current save state and include auth context, save availability, payload size, squad integrity, league data integrity, season state, finance state, feature-history signals and last UI error.
 
 The panel can validate the current save payload by restoring it in memory and can generate a JSON debug export. The export intentionally excludes passwords and Supabase access tokens, but it may include manager ID, email and save data, so it should be treated as private debugging material.
+
+
+## v2.3.0 — Realistic League Expansion
+
+This release gives the domestic league a stronger identity layer while keeping the deterministic match engine and fast Netlify build intact.
+
+Each club now has optional metadata stored on the `Team` object: short name, city, stadium, country, colors, tactical style, ambition, rival team and fanbase. This metadata survives in the save payload because it is part of the existing teams array.
+
+AI tactical behavior can now be derived from the club tactical style. Examples:
+
+- high-press clubs use attacking 4-3-3 with high pressing;
+- possession clubs use 4-2-3-1 balanced medium pressing;
+- counter clubs use defensive 5-3-2;
+- defensive clubs use low-block 5-3-2.
+
+The user-controlled club still uses the tactic selected by the manager. The identity layer therefore improves AI diversity without taking control away from the player.
+
+The new League tab summarizes:
+
+- league name and total rounds;
+- title-race story;
+- pressure-zone story;
+- fixture of the week;
+- team identities;
+- rivalries and intensity.
+
+This is intentionally not a full database league editor yet. It is a deterministic in-code league profile that can later be moved to Supabase when the game needs editable or user-generated leagues.
+
+## v2.4.0 — News Inbox / Manager Messages
+
+- Adds a saved in-game Inbox tab for manager messages.
+- Generates news for match rounds, finances, injuries, board reviews, transfers, scouting, academy actions, contracts, cup rounds and season transitions.
+- Supports unread/read state, mark-all-read, category summary and manual club snapshot messages.
+- Keeps the existing Supabase single-table save model by storing inbox messages inside the manager save payload.
+
+## v2.5.0 — Sponsorships & Commercial Deals
+
+The commercial layer adds deterministic sponsorship offers and active sponsor contracts. Sponsors can provide signing bonuses, base income per league round, win bonuses and objective bonuses. The system is saved inside the same per-user payload and does not require new Supabase tables.
+
+---
+
+## 10. Stadium & Facilities
+
+Versiunea 2.6.0 adauga un layer de infrastructura: stadion, fan experience, training ground, medical center, academy campus si commercial zone. Upgrade-urile costa cash, cresc costul de mentenanta, dar pot creste veniturile si eficienta dezvoltarii clubului.
+
+
+## v2.7.0 - Player Identity & Presentation
+
+Adds richer player identity: nationality, flag, preferred foot, personality, player role, marketability, a new Players tab, and deterministic save-compatible normalization for older careers.
+
+## v3.3.0 Combined Systems
+
+The v3.3.0 package adds Staff, Records/Awards, Balance, Media, Fans and Difficulty as separate lightweight systems. They are saved in the same per-user payload and stay compatible with older saves through default normalization during load.
+
+## v3.4.0 - Stabilizare & QA
+
+Release-ul v3.4.0 adauga save migration, ErrorBoundary recovery, tabul Stability, re-exporturi de tipuri in `src/types`, scripturile `npm run migration`, `npm run stabilization` si comanda completa `npm run fullcheck`. Detalii in `STABILIZATION_QA.md`.
+
+
+
+## v3.5.0 - Real Database Mode
+
+Adds optional Supabase relational mirror tables while keeping `manager_saves.payload` as the canonical fallback. New files: `REAL_DATABASE_MODE.md`, `src/engine/realDatabaseMode.ts`, `src/lib/realDatabaseService.ts`, and `src/engine/testRealDatabaseMode.ts`. Run `npm run database` or `npm run fullcheck`.
+
+## v3.6.0 — Multiplayer / Friends League
+
+Friends League is snapshot-based, not real-time. Managers can compare careers through Supabase-owned league rooms and snapshot rows while the existing deterministic single-player simulation stays unchanged.
+
+
+## v3.8.0 — Player Portraits / Pixel Avatars
+
+Added deterministic SVG pixel portraits, a Portraits tab, portrait thumbnails in player identity views, and `npm run portraits`.
+
+## v3.9.0 — Advanced Tactics
+
+Advanced tactics extends the original formation / mentality / pressing layer. The new settings are deterministic and lightweight: tempo, width, risk, defensive line and attacking focus. They influence the advanced strength report and are also used by match simulation through the advanced team strength calculation.
+
+## v4.0.0 — Beta Polish Release
+
+- New Release tab with launch readiness score.
+- Portable save JSON export.
+- Copyable release notes for testers.
+- `npm run release` added and included in `npm run fullcheck`.
+- Save schema updated to `40`.
+---
+
+## v4.1 Performance & Deploy Optimization
+
+This release does not add gameplay mechanics. It improves deploy quality after the v4.0 beta polish release by splitting the Vite production build into predictable chunks:
+
+- React vendor runtime;
+- deterministic engine modules;
+- auth/save/database services;
+- app shell.
+
+The goal is to keep Netlify builds simple and remove the large single-bundle warning without adding dependencies or changing the game loop.
+
+
+
+## v4.2.0 PWA / Offline Install
+
+The game can now be installed as a lightweight browser/mobile PWA. The implementation uses a static manifest, service worker and offline fallback copied by Vite from `public/` into `dist/`. No external API, AI image generation or heavy dependency is required. Offline mode protects the app shell and local save path; Supabase Auth/cloud save remain online-only.
+
+
+## v4.3.0 - Notifications & Reminders
+
+Adds a Notification Center with browser permission status, in-app reminders, archived reminders in the save payload, and QA script `npm run notifications`.
