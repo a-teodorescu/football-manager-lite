@@ -11,7 +11,17 @@ import type { SeasonHistoryRecord } from "../engine/seasonProgression";
 import type { ContractRecord } from "../engine/contracts";
 import type { ScoutReport, ScoutingRecord } from "../engine/scouting";
 import type { CupRecord, CupState } from "../engine/cupCompetition";
+import type { EuropeanCompetitionRecord, EuropeanCompetitionState } from "../engine/europeanCompetitions";
 import type { BoardState } from "../engine/boardObjectives";
+import type { InboxMessage } from "../engine/newsInbox";
+import type { SponsorshipRecord, SponsorshipState } from "../engine/sponsorship";
+import type { FacilityRecord, StadiumFacilitiesState } from "../engine/stadiumFacilities";
+import type { StaffState } from "../engine/staffCoaching";
+import type { DifficultySettings } from "../engine/gameBalance";
+import type { MediaState } from "../engine/mediaCenter";
+import type { FanState } from "../engine/fanExperience";
+import type { NotificationReminder, NotificationSettings } from "../engine/notificationsReminders";
+import { migrateSavePayload, SAVE_SCHEMA_VERSION } from "./saveMigration";
 
 export interface ClubProfile {
   name: string;
@@ -44,7 +54,20 @@ export interface ManagerSavePayload {
   scoutingHistory?: ScoutingRecord[];
   cupState?: CupState;
   cupHistory?: CupRecord[];
+  europeanState?: EuropeanCompetitionState;
+  europeanHistory?: EuropeanCompetitionRecord[];
   boardState?: BoardState;
+  inboxMessages?: InboxMessage[];
+  sponsorships?: SponsorshipState;
+  sponsorshipHistory?: SponsorshipRecord[];
+  facilities?: StadiumFacilitiesState;
+  facilityHistory?: FacilityRecord[];
+  staff?: StaffState;
+  difficulty?: DifficultySettings;
+  media?: MediaState;
+  fans?: FanState;
+  notificationSettings?: NotificationSettings;
+  notificationHistory?: NotificationReminder[];
   teams: Team[];
   fixtures: Fixture[];
   results: FixtureResult[];
@@ -72,7 +95,7 @@ export function isSupabaseConfigured(): boolean {
 }
 
 export function saveToLocalStorage(userId: string, payload: ManagerSavePayload): void {
-  localStorage.setItem(getLocalSaveKey(userId), JSON.stringify(payload));
+  localStorage.setItem(getLocalSaveKey(userId), JSON.stringify(migrateSavePayload({ ...payload, managerId: userId, version: SAVE_SCHEMA_VERSION }, userId)));
 }
 
 export function loadFromLocalStorage(userId: string): ManagerSavePayload | null {
@@ -80,7 +103,7 @@ export function loadFromLocalStorage(userId: string): ManagerSavePayload | null 
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as ManagerSavePayload;
+    return migrateSavePayload(JSON.parse(raw), userId);
   } catch {
     localStorage.removeItem(getLocalSaveKey(userId));
     return null;
@@ -111,10 +134,11 @@ export async function saveToSupabase(userId: string, accessToken: string, payloa
       },
       body: JSON.stringify({
         manager_id: userId,
-        payload: {
+        payload: migrateSavePayload({
           ...payload,
           managerId: userId,
-        },
+          version: SAVE_SCHEMA_VERSION,
+        }, userId),
         updated_at: payload.updatedAt,
       }),
     }
@@ -153,7 +177,7 @@ export async function loadFromSupabase(userId: string, accessToken: string): Pro
   const rows = (await response.json()) as Array<{ payload: ManagerSavePayload }>;
   const payload = rows[0]?.payload ?? null;
 
-  return payload ? { ...payload, managerId: userId } : null;
+  return payload ? migrateSavePayload({ ...payload, managerId: userId }, userId) : null;
 }
 
 export async function deleteSupabaseSave(userId: string, accessToken: string): Promise<void> {
