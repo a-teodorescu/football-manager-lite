@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Fixture } from "./engine/fixtureGenerator";
 import {
   FixtureResult,
@@ -9,17 +9,96 @@ import {
   getTeamTactic,
   simulateRound,
 } from "./engine/leagueSimulation";
-import { MatchEventType, Tactic, Team } from "./engine/types";
+import { MatchEventType, SetPieceRole, SubstitutionInstruction, Tactic, Team } from "./engine/types";
+import {
+  applyLineupSelectionToTeam,
+  autoPickLineup,
+  getFormationSlots,
+  getSelectedLineupPlayerIds,
+  validateLineupSelection,
+} from "./engine/lineupSelection";
+import {
+  addSubstitutionToTeam,
+  autoPickSubstitutionPlan,
+  buildSubstitutionReport,
+  clearSubstitutionPlan,
+  normalizeSubstitutionPlan,
+} from "./engine/substitutions";
+import {
+  autoPickSetPieces,
+  buildSetPieceReport,
+  getSetPieceRoles,
+  scorePlayerForSetPieceRole,
+  setSetPieceAssignment,
+} from "./engine/setPieces";
+import { buildAdvancedTacticsReport, calculateAdvancedTeamStrength, getAdvancedTacticValueOptions, normalizeAdvancedTactic } from "./engine/advancedTactics";
 import { calculateTeamStrength } from "./engine/teamStrength";
 import {
   buildMatchAnalysis,
   buildMatchPreview,
 } from "./engine/matchExperience";
 import { buildManagerDashboard } from "./engine/managerDashboard";
+import { buildManagerNavigationReport } from "./engine/managerNavigation";
 import { buildUiExperience } from "./engine/uiExperience";
 import { buildBetaReadiness } from "./engine/betaReadiness";
 import { buildLiveDeployQa } from "./engine/liveDeployQa";
 import { buildAdminDebugPanel } from "./engine/adminDebug";
+import { buildStabilityReport } from "./engine/stabilization";
+import { buildBetaPolishReleaseReport } from "./engine/betaPolishRelease";
+import { buildPerformanceDeployReport } from "./engine/performanceDeploy";
+import { buildPwaInstallReport } from "./engine/pwaInstall";
+import {
+  buildNotificationCenterReport,
+  createInitialNotificationSettings,
+  type BrowserNotificationPermission,
+  type NotificationReminder,
+  type NotificationSettings,
+} from "./engine/notificationsReminders";
+import { buildRealDatabaseModeReport } from "./engine/realDatabaseMode";
+import { buildOppositionScoutReport, getMatchPlanRiskLabel } from "./engine/oppositionScout";
+import { buildCareerTrophyRoomReport } from "./engine/careerTrophyRoom";
+import { buildMultiplayerLeagueReport } from "./engine/multiplayerLeague";
+import {
+  addInboxMessages,
+  buildAcademyNewsMessage,
+  buildClubSnapshotMessage,
+  buildContractNewsMessage,
+  buildCupNewsMessage,
+  buildInboxSummary,
+  buildRoundNewsMessages,
+  buildScoutingNewsMessage,
+  buildSeasonNewsMessages,
+  buildSponsorshipNewsMessage,
+  buildFacilityNewsMessage,
+  buildTrainingNewsMessage,
+  buildTransferNewsMessage,
+  createWelcomeInboxMessages,
+  getInboxCategoryLabel,
+  markAllInboxMessagesRead,
+  markInboxMessageRead,
+  type InboxMessage,
+} from "./engine/newsInbox";
+import {
+  buildLeagueOverview,
+  applyTeamIdentity,
+  getLeagueTierLabel,
+  getTeamAmbitionLabel,
+  getTeamStyleLabel,
+} from "./engine/leagueExpansion";
+import {
+  buildPlayerIdentityOverview,
+  buildPlayerIdentitySummary,
+  getPersonalityLabel,
+  getPreferredFootLabel,
+  getRoleLabel,
+  normalizeTeamPlayerIdentities,
+} from "./engine/playerIdentity";
+import {
+  buildPlayerPortrait,
+  buildPortraitGallery,
+  getPortraitFrameLabel,
+  getPortraitMoodLabel,
+} from "./engine/playerPortraits";
 import {
   getTrainingFocusLabel,
   runTeamTraining,
@@ -58,6 +137,68 @@ import {
   type ScoutingRecord,
 } from "./engine/scouting";
 import {
+  calculateSponsorshipRoundIncome,
+  createInitialSponsorshipState,
+  expireSponsorshipDeals,
+  getSponsorshipCategoryLabel,
+  getSponsorshipHealth,
+  refreshSponsorshipOffers,
+  signSponsorshipDeal,
+  type SponsorshipRecord,
+  type SponsorshipState,
+} from "./engine/sponsorship";
+import {
+  calculateFacilityRoundImpact,
+  createInitialFacilities,
+  getEffectiveAcademyRoundCost,
+  getFacilitiesOverview,
+  getFacilityTrainingBonus,
+  getFacilityUpgradeOptions,
+  getFacilityLabel,
+  prepareFacilitiesForNewSeason,
+  upgradeFacility,
+  type FacilityRecord,
+  type FacilityUpgradeType,
+  type StadiumFacilitiesState,
+} from "./engine/stadiumFacilities";
+import {
+  buildStaffImpact,
+  calculateStaffWageCost,
+  createInitialStaffState,
+  getAdjustedScoutingCost,
+  getStaffRoleLabel,
+  hireStaffMember,
+  refreshStaffCandidates,
+  type StaffState,
+} from "./engine/staffCoaching";
+import {
+  buildPlayerStatsAwardsReport,
+} from "./engine/playerStatsAwards";
+import {
+  applyDifficultyToCost,
+  applyDifficultyToMoney,
+  buildBalanceReport,
+  createInitialDifficultySettings,
+  getDifficultyLabel,
+  getDifficultyOptions,
+  type DifficultyLevel,
+  type DifficultySettings,
+} from "./engine/gameBalance";
+import {
+  answerPressConference,
+  buildMediaReport,
+  buildRoundMediaMessage,
+  createInitialMediaState,
+  type PressAnswer,
+  type MediaState,
+} from "./engine/mediaCenter";
+import {
+  buildFanReport,
+  createInitialFanState,
+  updateFanStateAfterRound,
+  type FanState,
+} from "./engine/fanExperience";
+import {
   createInitialCupState,
   getCupRoundLabel,
   getCurrentCupRoundName,
@@ -67,6 +208,16 @@ import {
   type CupRecord,
   type CupState,
 } from "./engine/cupCompetition";
+import {
+  createInitialEuropeanCompetitionState,
+  getCurrentEuropeanRoundName,
+  getEuropeanRoundLabel,
+  getUserEuropeanMatch,
+  isUserStillInEurope,
+  simulateEuropeanRound,
+  type EuropeanCompetitionRecord,
+  type EuropeanCompetitionState,
+} from "./engine/europeanCompetitions";
 import {
   createInitialBoardState,
   evaluateBoard,
@@ -125,6 +276,7 @@ import {
   saveToLocalStorage,
   saveToSupabase,
 } from "./lib/saveService";
+import { SAVE_SCHEMA_VERSION } from "./lib/saveMigration";
 import {
   AuthSession,
   getStoredAuthSession,
@@ -132,8 +284,15 @@ import {
   logoutFromSupabase,
   registerWithEmail,
 } from "./lib/authService";
+import {
+  buildRealDatabaseSnapshot,
+  syncRealDatabaseSnapshot,
+} from "./lib/realDatabaseService";
 
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "4.9.0";
+const APP_TSX_ESTIMATED_LINES = 10550;
+const ENGINE_MODULE_COUNT = 45;
+const MAIN_TAB_COUNT = 45;
 
 const DEFAULT_CLUB_PROFILE: ClubProfile = {
   name: "FC Bucuresti",
@@ -144,23 +303,48 @@ const DEFAULT_CLUB_PROFILE: ClubProfile = {
 
 type Tab =
   | "dashboard"
+  | "inbox"
+  | "league"
   | "board"
   | "squad"
+  | "lineup"
+  | "subs"
+  | "setpieces"
+  | "prep"
+  | "players"
+  | "portraits"
+  | "staff"
+  | "records"
+  | "trophy"
+  | "media"
+  | "fans"
+  | "difficulty"
   | "training"
   | "medical"
   | "transfers"
   | "scouting"
+  | "sponsorships"
+  | "facilities"
   | "finance"
   | "contracts"
   | "academy"
   | "seasons"
   | "cup"
+  | "europe"
   | "tactics"
+  | "advancedTactics"
   | "match"
   | "fixtures"
   | "standings"
   | "help"
   | "beta"
+  | "release"
+  | "performance"
+  | "pwa"
+  | "notifications"
+  | "stability"
+  | "database"
+  | "multiplayer"
   | "qa"
   | "admin";
 type SaveStatus = string;
@@ -188,7 +372,20 @@ interface GameState {
   contractHistory: ContractRecord[];
   cupState: CupState;
   cupHistory: CupRecord[];
+  europeanState: EuropeanCompetitionState;
+  europeanHistory: EuropeanCompetitionRecord[];
   boardState: BoardState;
+  inboxMessages: InboxMessage[];
+  sponsorships: SponsorshipState;
+  sponsorshipHistory: SponsorshipRecord[];
+  facilities: StadiumFacilitiesState;
+  facilityHistory: FacilityRecord[];
+  staff: StaffState;
+  difficulty: DifficultySettings;
+  media: MediaState;
+  fans: FanState;
+  notificationSettings: NotificationSettings;
+  notificationHistory: NotificationReminder[];
   teams: Team[];
   fixtures: Fixture[];
   results: FixtureResult[];
@@ -215,9 +412,11 @@ function applyClubProfileToTeams(
   seasonNumber = 1,
 ): Team[] {
   return teams.map((team) => {
-    const normalizedTeam = normalizeTeamContracts(
-      normalizeTeamStatus(team),
-      seasonNumber,
+    const normalizedTeam = normalizeTeamPlayerIdentities(
+      normalizeTeamContracts(
+        normalizeTeamStatus(applyTeamIdentity(team)),
+        seasonNumber,
+      ),
     );
 
     return team.id === USER_TEAM_ID
@@ -283,10 +482,21 @@ function createNewGame(
   userTactic: Tactic = defaultUserTactic,
 ): GameState {
   const normalizedClubProfile = normalizeClubProfile(clubProfile);
-  const teams = applyClubProfileToTeams(
+  const profiledTeams = applyClubProfileToTeams(
     createMockLeagueTeams(),
     normalizedClubProfile,
     seasonNumber,
+  );
+  const userTeamWithLineup = autoPickLineup(
+    getUserTeam(profiledTeams),
+    userTactic.formation,
+  );
+  const userTeamWithSetPieces = autoPickSetPieces(
+    userTeamWithLineup,
+    userTactic.formation,
+  );
+  const teams = profiledTeams.map((team) =>
+    team.id === USER_TEAM_ID ? userTeamWithSetPieces : team,
   );
   const fixtures = generateFixtures(teams);
 
@@ -311,7 +521,28 @@ function createNewGame(
     contractHistory: [],
     cupState: createInitialCupState(teams, seasonNumber),
     cupHistory: [],
+    europeanState: createInitialEuropeanCompetitionState(teams, seasonNumber),
+    europeanHistory: [],
     boardState: createInitialBoardState(seasonNumber),
+    sponsorships: createInitialSponsorshipState({
+      seasonNumber,
+      team: getUserTeam(teams),
+      boardConfidence: 60,
+    }),
+    sponsorshipHistory: [],
+    facilities: createInitialFacilities(getUserTeam(teams), seasonNumber),
+    facilityHistory: [],
+    staff: createInitialStaffState(seasonNumber, getUserTeam(teams)),
+    difficulty: createInitialDifficultySettings(),
+    media: createInitialMediaState(seasonNumber, normalizedClubProfile.name),
+    fans: createInitialFanState(getUserTeam(teams)),
+    notificationSettings: createInitialNotificationSettings(),
+    notificationHistory: [],
+    inboxMessages: createWelcomeInboxMessages({
+      seasonNumber,
+      clubName: normalizedClubProfile.name,
+      city: normalizedClubProfile.city,
+    }),
     teams,
     fixtures,
     results: [],
@@ -322,6 +553,8 @@ function createNewGame(
 function getEventClass(type: MatchEventType): string {
   if (type === "goal") return "event event-goal";
   if (type === "yellow_card") return "event event-card";
+  if (type === "substitution") return "event event-substitution";
+  if (type === "set_piece") return "event event-set-piece";
   if (type === "shot_on_target") return "event event-target";
   return "event";
 }
@@ -348,7 +581,7 @@ function getSavePayload(
   managerId: string,
 ): ManagerSavePayload {
   return {
-    version: 1,
+    version: SAVE_SCHEMA_VERSION,
     managerId,
     seasonNumber: game.seasonNumber,
     currentRound: game.currentRound,
@@ -371,7 +604,20 @@ function getSavePayload(
     contractHistory: game.contractHistory,
     cupState: game.cupState,
     cupHistory: game.cupHistory,
+    europeanState: game.europeanState,
+    europeanHistory: game.europeanHistory,
     boardState: game.boardState,
+    inboxMessages: game.inboxMessages,
+    sponsorships: game.sponsorships,
+    sponsorshipHistory: game.sponsorshipHistory,
+    facilities: game.facilities,
+    facilityHistory: game.facilityHistory,
+    staff: game.staff,
+    difficulty: game.difficulty,
+    media: game.media,
+    fans: game.fans,
+    notificationSettings: game.notificationSettings,
+    notificationHistory: game.notificationHistory,
     teams: game.teams,
     fixtures: game.fixtures,
     results: game.results,
@@ -388,10 +634,20 @@ function gameFromPayload(payload: ManagerSavePayload): GameState {
   const clubProfile = normalizeClubProfile(
     payload.clubProfile ?? { name: savedUserTeamName },
   );
-  const teams = applyClubProfileToTeams(
+  const profiledTeams = applyClubProfileToTeams(
     payload.teams,
     clubProfile,
     payload.seasonNumber,
+  );
+  const loadedUserTeam = getUserTeam(profiledTeams);
+  const userTeamWithLineup = loadedUserTeam.lineupPlayerIds?.length
+    ? loadedUserTeam
+    : autoPickLineup(loadedUserTeam, payload.userTactic.formation);
+  const userTeamWithSetPieces = userTeamWithLineup.setPieceAssignments
+    ? userTeamWithLineup
+    : autoPickSetPieces(userTeamWithLineup, payload.userTactic.formation);
+  const teams = profiledTeams.map((team) =>
+    team.id === USER_TEAM_ID ? userTeamWithSetPieces : team,
   );
 
   return {
@@ -421,10 +677,38 @@ function gameFromPayload(payload: ManagerSavePayload): GameState {
     cupState:
       payload.cupState ?? createInitialCupState(teams, payload.seasonNumber),
     cupHistory: payload.cupHistory ?? [],
+    europeanState:
+      payload.europeanState ?? createInitialEuropeanCompetitionState(teams, payload.seasonNumber),
+    europeanHistory: payload.europeanHistory ?? [],
     boardState:
       payload.boardState ?? createInitialBoardState(payload.seasonNumber),
+    inboxMessages:
+      payload.inboxMessages ??
+      createWelcomeInboxMessages({
+        seasonNumber: payload.seasonNumber,
+        clubName: clubProfile.name,
+        city: clubProfile.city,
+      }),
+    sponsorships:
+      payload.sponsorships ??
+      createInitialSponsorshipState({
+        seasonNumber: payload.seasonNumber,
+        team: getUserTeam(teams),
+        boardConfidence: payload.boardState?.jobSecurity ?? 60,
+      }),
+    sponsorshipHistory: payload.sponsorshipHistory ?? [],
+    facilities: payload.facilities ?? createInitialFacilities(getUserTeam(teams), payload.seasonNumber),
+    facilityHistory: payload.facilityHistory ?? [],
+    staff: payload.staff ?? createInitialStaffState(payload.seasonNumber, getUserTeam(teams)),
+    difficulty: payload.difficulty ?? createInitialDifficultySettings(),
+    media: payload.media ?? createInitialMediaState(payload.seasonNumber, clubProfile.name),
+    fans: payload.fans ?? createInitialFanState(getUserTeam(teams)),
+    notificationSettings: payload.notificationSettings ?? createInitialNotificationSettings(),
+    notificationHistory: payload.notificationHistory ?? [],
     teams: teams.map((team) =>
-      normalizeTeamContracts(normalizeTeamStatus(team), payload.seasonNumber),
+      normalizeTeamPlayerIdentities(
+        normalizeTeamContracts(normalizeTeamStatus(team), payload.seasonNumber),
+      ),
     ),
     fixtures: applyClubProfileToFixtures(payload.fixtures, clubProfile),
     results: applyClubProfileToResults(payload.results, clubProfile),
@@ -493,6 +777,16 @@ function updateUserTeamInFutureFixtures(
           : fixture.awayTeam,
     };
   });
+}
+
+function applyUserTeamUpdate(game: GameState, updatedUserTeam: Team): GameState {
+  return {
+    ...game,
+    teams: game.teams.map((team) =>
+      team.id === USER_TEAM_ID ? updatedUserTeam : team,
+    ),
+    fixtures: updateUserTeamInFutureFixtures(game.fixtures, updatedUserTeam),
+  };
 }
 
 function createInitialGameFromStoredSession(): GameState {
@@ -568,6 +862,64 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("");
   const [errorMessage, setErrorMessage] = useState("");
   const [adminExportText, setAdminExportText] = useState("");
+  const [databaseSyncStatus, setDatabaseSyncStatus] = useState("");
+  const [pwaServiceWorkerStatus, setPwaServiceWorkerStatus] = useState<"registered" | "pending" | "unsupported" | "error">(() =>
+    typeof navigator !== "undefined" && "serviceWorker" in navigator ? "pending" : "unsupported",
+  );
+  const [pwaInstallPromptAvailable, setPwaInstallPromptAvailable] = useState(false);
+  const [pwaInstalled, setPwaInstalled] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches,
+  );
+  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+    return Notification.permission as BrowserNotificationPermission;
+  });
+  const [subOutPlayerId, setSubOutPlayerId] = useState("");
+  const [subInPlayerId, setSubInPlayerId] = useState("");
+  const [subMinute, setSubMinute] = useState(60);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const handleServiceWorkerRegistered = () => setPwaServiceWorkerStatus("registered");
+    const handleServiceWorkerError = () => setPwaServiceWorkerStatus("error");
+    const handleInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setPwaInstallPromptAvailable(true);
+    };
+    const handleInstalled = () => {
+      setPwaInstalled(true);
+      setPwaInstallPromptAvailable(false);
+    };
+
+    window.addEventListener("fml-sw-registered", handleServiceWorkerRegistered);
+    window.addEventListener("fml-sw-error", handleServiceWorkerError);
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .getRegistration()
+        .then((registration) => {
+          if (registration) setPwaServiceWorkerStatus("registered");
+        })
+        .catch(() => setPwaServiceWorkerStatus("error"));
+    } else {
+      setPwaServiceWorkerStatus("unsupported");
+    }
+
+    const standaloneQuery = window.matchMedia?.("(display-mode: standalone)");
+    const handleDisplayModeChange = () => setPwaInstalled(Boolean(standaloneQuery?.matches));
+    standaloneQuery?.addEventListener?.("change", handleDisplayModeChange);
+
+    return () => {
+      window.removeEventListener("fml-sw-registered", handleServiceWorkerRegistered);
+      window.removeEventListener("fml-sw-error", handleServiceWorkerError);
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+      standaloneQuery?.removeEventListener?.("change", handleDisplayModeChange);
+    };
+  }, []);
 
   const maxRound = useMemo(() => getMaxRound(game.fixtures), [game.fixtures]);
   const seasonFinished = game.currentRound > maxRound;
@@ -577,6 +929,47 @@ export default function App() {
   );
   const trainingDoneThisRound = game.lastTrainingRoundKey === trainingRoundKey;
   const userTeam = useMemo(() => getUserTeam(game.teams), [game.teams]);
+  const lineupReport = useMemo(
+    () => validateLineupSelection(userTeam, game.userTactic.formation),
+    [userTeam, game.userTactic.formation],
+  );
+  const lineupSlots = useMemo(
+    () => getFormationSlots(game.userTactic.formation),
+    [game.userTactic.formation],
+  );
+  const selectedLineupIds = useMemo(
+    () => getSelectedLineupPlayerIds(userTeam, game.userTactic.formation),
+    [userTeam, game.userTactic.formation],
+  );
+  const selectedLineupIdSet = useMemo(
+    () => new Set(selectedLineupIds),
+    [selectedLineupIds],
+  );
+  const substitutionReport = useMemo(
+    () => buildSubstitutionReport(userTeam, game.userTactic.formation),
+    [userTeam, game.userTactic.formation],
+  );
+  const setPieceReport = useMemo(
+    () => buildSetPieceReport(userTeam, game.userTactic.formation),
+    [userTeam, game.userTactic.formation],
+  );
+  const setPieceRoles = useMemo(() => getSetPieceRoles(), []);
+  const substitutionPlayerById = useMemo(
+    () => new Map(userTeam.players.map((player) => [player.id, player])),
+    [userTeam],
+  );
+  const playerIdentityOverview = useMemo(
+    () => buildPlayerIdentityOverview(userTeam),
+    [userTeam],
+  );
+  const portraitGallery = useMemo(
+    () =>
+      buildPortraitGallery(userTeam, {
+        primaryColor: game.clubProfile.primaryColor,
+        secondaryColor: game.clubProfile.secondaryColor,
+      }),
+    [userTeam, game.clubProfile.primaryColor, game.clubProfile.secondaryColor],
+  );
   const userAverageFitness = getAverageFitness(userTeam);
   const unavailablePlayers = getUnavailablePlayers(userTeam);
   const injuredPlayers = userTeam.players.filter(isPlayerInjured);
@@ -652,9 +1045,22 @@ export default function App() {
   const nextMatchPreview = nextUserFixture
     ? buildMatchPreview(nextUserFixture, game.userTactic)
     : undefined;
+  const oppositionScoutReport = useMemo(
+    () =>
+      buildOppositionScoutReport({
+        fixture: nextUserFixture,
+        userTeam,
+        userTactic: game.userTactic,
+      }),
+    [nextUserFixture, userTeam, game.userTactic],
+  );
   const currentCupRoundName = getCurrentCupRoundName(game.cupState);
   const userCupMatch = getUserCupMatch(game.cupState);
   const userStillInCup = isUserStillInCup(game.cupState);
+  const currentEuropeanRoundName = getCurrentEuropeanRoundName(game.europeanState);
+  const userEuropeanMatch = getUserEuropeanMatch(game.europeanState);
+  const userStillInEurope = isUserStillInEurope(game.europeanState);
+  const latestEuropeanRecord = game.europeanHistory[0];
   const latestCupRecord = game.cupHistory[0];
   const latestBoardReview = game.boardState.reviews[0];
   const failedBoardObjectives = game.boardState.objectives.filter(
@@ -784,6 +1190,39 @@ export default function App() {
     () => getSavePayload(game, authSession?.user.id ?? "anonymous"),
     [game, authSession],
   );
+  const realDatabaseSnapshot = useMemo(
+    () => buildRealDatabaseSnapshot(currentSavePayload),
+    [currentSavePayload],
+  );
+  const realDatabaseMode = useMemo(
+    () =>
+      buildRealDatabaseModeReport({
+        appVersion: APP_VERSION,
+        authenticated: Boolean(authSession),
+        supabaseConfigured: isSupabaseConfigured(),
+        userId: authSession?.user.id,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        payloadVersion: currentSavePayload.version,
+        teamsCount: game.teams.length,
+        playersCount: userTeam.players.length,
+        fixturesCount: game.fixtures.length,
+        resultsCount: game.results.length,
+        financeReportsCount: game.financeHistory.length,
+        inboxMessagesCount: game.inboxMessages.length,
+        normalizedTables: realDatabaseSnapshot.tables,
+      }),
+    [
+      authSession,
+      currentSavePayload.version,
+      game.teams.length,
+      userTeam.players.length,
+      game.fixtures.length,
+      game.results.length,
+      game.financeHistory.length,
+      game.inboxMessages.length,
+      realDatabaseSnapshot.tables,
+    ],
+  );
   const adminSavePayloadBytes = useMemo(
     () => estimateJsonSizeBytes(currentSavePayload),
     [currentSavePayload],
@@ -849,6 +1288,187 @@ export default function App() {
     ],
   );
 
+  const stabilityReport = useMemo(
+    () =>
+      buildStabilityReport({
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        savePayloadVersion: currentSavePayload.version,
+        savePayloadBytes: adminSavePayloadBytes,
+        appTsxLines: APP_TSX_ESTIMATED_LINES,
+        totalTabs: MAIN_TAB_COUNT,
+        errorBoundaryEnabled: true,
+        fullcheckAvailable: true,
+        hasRecentError: Boolean(errorMessage),
+        teamsCount: game.teams.length,
+        fixturesCount: game.fixtures.length,
+        standingsCount: game.standings.length,
+        userPlayersCount: userTeam.players.length,
+        engineModuleCount: ENGINE_MODULE_COUNT,
+      }),
+    [
+      currentSavePayload.version,
+      adminSavePayloadBytes,
+      errorMessage,
+      game.teams.length,
+      game.fixtures.length,
+      game.standings.length,
+      userTeam.players.length,
+    ],
+  );
+
+  const leagueOverview = useMemo(
+    () =>
+      buildLeagueOverview({
+        teams: game.teams,
+        standings: game.standings,
+        fixtures: game.fixtures,
+        currentRound: game.currentRound,
+        maxRound,
+        userTeamId: USER_TEAM_ID,
+      }),
+    [game.teams, game.standings, game.fixtures, game.currentRound, maxRound],
+  );
+
+  const inboxSummary = useMemo(
+    () => buildInboxSummary(game.inboxMessages),
+    [game.inboxMessages],
+  );
+
+  const multiplayerLeague = useMemo(
+    () =>
+      buildMultiplayerLeagueReport({
+        appVersion: APP_VERSION,
+        authenticated: Boolean(authSession),
+        supabaseConfigured: isSupabaseConfigured(),
+        realDatabaseReadyScore: realDatabaseMode.readinessScore,
+        userId: authSession?.user.id,
+        managerName: authSession?.user.email?.split("@")[0],
+        clubName: game.clubProfile.name,
+        seasonNumber: game.seasonNumber,
+        currentRound: game.currentRound,
+        maxRound,
+        points: userStanding.points,
+        position: userClubPosition,
+        jobSecurity: game.boardState.jobSecurity,
+        cashBalance: game.finance.cashBalance,
+        inboxUnreadCount: inboxSummary.unreadCount,
+        hasCloudSave: cloudSaveLikelyAvailable,
+      }),
+    [
+      authSession,
+      realDatabaseMode.readinessScore,
+      game.clubProfile.name,
+      game.seasonNumber,
+      game.currentRound,
+      maxRound,
+      userStanding.points,
+      userClubPosition,
+      game.boardState.jobSecurity,
+      game.finance.cashBalance,
+      inboxSummary.unreadCount,
+      cloudSaveLikelyAvailable,
+    ],
+  );
+
+
+  const sponsorshipHealth = useMemo(
+    () => getSponsorshipHealth(game.sponsorships),
+    [game.sponsorships],
+  );
+  const latestSponsorshipRecord = game.sponsorshipHistory[0];
+  const facilitiesOverview = useMemo(
+    () =>
+      getFacilitiesOverview({
+        facilities: game.facilities,
+        team: userTeam,
+        standings: game.standings,
+      }),
+    [game.facilities, userTeam, game.standings],
+  );
+  const staffImpact = useMemo(() => buildStaffImpact(game.staff), [game.staff]);
+  const staffWageCost = calculateStaffWageCost(game.staff);
+  const playerStatsAwards = useMemo(
+    () =>
+      buildPlayerStatsAwardsReport({
+        team: userTeam,
+        results: game.results,
+        standings: game.standings,
+        seasonNumber: game.seasonNumber,
+      }),
+    [userTeam, game.results, game.standings, game.seasonNumber],
+  );
+  const careerTrophyRoom = useMemo(
+    () =>
+      buildCareerTrophyRoomReport({
+        clubName: game.clubProfile.name,
+        team: userTeam,
+        standings: game.standings,
+        results: game.results,
+        seasonNumber: game.seasonNumber,
+        currentRound: game.currentRound,
+        maxRound,
+        seasonHistory: game.seasonHistory,
+        cupHistory: game.cupHistory,
+        europeanHistory: game.europeanHistory,
+        playerStats: playerStatsAwards.stats,
+      }),
+    [
+      game.clubProfile.name,
+      userTeam,
+      game.standings,
+      game.results,
+      game.seasonNumber,
+      game.currentRound,
+      maxRound,
+      game.seasonHistory,
+      game.cupHistory,
+      game.europeanHistory,
+      playerStatsAwards.stats,
+    ],
+  );
+  const mediaReport = useMemo(() => buildMediaReport(game.media), [game.media]);
+  const fanReport = useMemo(
+    () =>
+      buildFanReport({
+        state: game.fans,
+        team: userTeam,
+        standings: game.standings,
+        facilities: game.facilities,
+      }),
+    [game.fans, userTeam, game.standings, game.facilities],
+  );
+  const balanceReport = useMemo(
+    () =>
+      buildBalanceReport({
+        difficulty: game.difficulty,
+        finance: game.finance,
+        team: userTeam,
+        jobSecurity: game.boardState.jobSecurity,
+        wageBill: wageBill + staffWageCost,
+        squadValue,
+      }),
+    [game.difficulty, game.finance, userTeam, game.boardState.jobSecurity, wageBill, staffWageCost, squadValue],
+  );
+  const facilityUpgradeOptions = useMemo(
+    () => getFacilityUpgradeOptions(game.facilities),
+    [game.facilities],
+  );
+  const latestFacilityRecord = game.facilityHistory[0];
+  const effectiveAcademyRoundCost = getEffectiveAcademyRoundCost(
+    game.youthAcademy,
+    academyRoundCost,
+    game.facilities,
+  );
+  const sponsorshipCanRefresh =
+    game.sponsorships.lastRefreshRoundKey !==
+    getTrainingRoundKey(game.seasonNumber, game.currentRound);
+
+  const latestInboxMessages = useMemo(
+    () => game.inboxMessages.slice(0, 8),
+    [game.inboxMessages],
+  );
+
   const importantEvents =
     selectedMatch?.result.events.filter((event) =>
       [
@@ -866,6 +1486,160 @@ export default function App() {
     () => calculateTeamStrength(userTeam, game.userTactic),
     [userTeam, game.userTactic],
   );
+  const advancedTactic = useMemo(
+    () => normalizeAdvancedTactic(game.userTactic),
+    [game.userTactic],
+  );
+  const advancedTacticsReport = useMemo(
+    () => buildAdvancedTacticsReport(userTeam, game.userTactic),
+    [userTeam, game.userTactic],
+  );
+  const advancedTeamStrength = useMemo(
+    () => calculateAdvancedTeamStrength(userTeam, game.userTactic),
+    [userTeam, game.userTactic],
+  );
+  const advancedTacticOptions = getAdvancedTacticValueOptions();
+
+  const betaPolishRelease = useMemo(
+    () =>
+      buildBetaPolishReleaseReport({
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        betaReadinessScore: betaReadiness.score,
+        stabilityScore: stabilityReport.score,
+        adminScore: adminDebug.score,
+        databaseReadinessScore: realDatabaseMode.readinessScore,
+        multiplayerReadinessScore: multiplayerLeague.readinessScore,
+        tacticalScore: advancedTacticsReport.tacticalScore,
+        authenticated: Boolean(authSession),
+        supabaseConfigured: isSupabaseConfigured(),
+        localSaveAvailable,
+        cloudSaveLikelyAvailable,
+        resultsCount: game.results.length,
+        seasonHistoryCount: game.seasonHistory.length,
+        inboxUnreadCount: inboxSummary.unreadCount,
+        savePayloadBytes: adminSavePayloadBytes,
+        totalTabs: MAIN_TAB_COUNT,
+        engineChecksCount: ENGINE_MODULE_COUNT,
+        hasRecentError: Boolean(errorMessage),
+      }),
+    [
+      betaReadiness.score,
+      stabilityReport.score,
+      adminDebug.score,
+      realDatabaseMode.readinessScore,
+      multiplayerLeague.readinessScore,
+      advancedTacticsReport.tacticalScore,
+      authSession,
+      localSaveAvailable,
+      cloudSaveLikelyAvailable,
+      game.results.length,
+      game.seasonHistory.length,
+      inboxSummary.unreadCount,
+      adminSavePayloadBytes,
+      errorMessage,
+    ],
+  );
+
+  const performanceDeploy = useMemo(
+    () =>
+      buildPerformanceDeployReport({
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        appEstimatedLines: APP_TSX_ESTIMATED_LINES,
+        totalTabs: MAIN_TAB_COUNT,
+        engineModuleCount: ENGINE_MODULE_COUNT,
+        buildUsesManualChunks: true,
+        reactVendorChunk: true,
+        engineChunk: true,
+        servicesChunk: true,
+        sourcemapDisabled: true,
+        packageLockExcluded: true,
+        nodeModulesExcluded: true,
+        distExcluded: true,
+        netlifyNodeVersion: "20",
+        netlifyBuildCommand: "npm run build",
+        netlifyPublishDir: "dist",
+        fullcheckAvailable: true,
+        bundleWarningResolved: true,
+      }),
+    [],
+  );
+
+  const pwaInstall = useMemo(
+    () =>
+      buildPwaInstallReport({
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        manifestLinked: true,
+        manifestHasIcons: true,
+        manifestHasStandaloneDisplay: true,
+        serviceWorkerSupported: typeof navigator !== "undefined" && "serviceWorker" in navigator,
+        serviceWorkerStatus: pwaServiceWorkerStatus,
+        offlineFallbackAvailable: true,
+        cacheStrategyVersioned: true,
+        secureContext:
+          typeof window === "undefined" ||
+          window.isSecureContext ||
+          window.location.hostname === "localhost",
+        netlifyCompatible: true,
+        localSaveAvailable,
+        installPromptAvailable: pwaInstallPromptAvailable,
+        displayModeStandalone: pwaInstalled,
+      }),
+    [localSaveAvailable, pwaInstallPromptAvailable, pwaInstalled, pwaServiceWorkerStatus],
+  );
+
+  const notificationCenter = useMemo(
+    () =>
+      buildNotificationCenterReport({
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        settings: game.notificationSettings,
+        permissionState: notificationPermission,
+        serviceWorkerStatus: pwaServiceWorkerStatus,
+        pwaInstalled,
+        secureContext:
+          typeof window === "undefined" ||
+          window.isSecureContext ||
+          window.location.hostname === "localhost",
+        authenticated: Boolean(authSession),
+        localSaveAvailable,
+        cloudSaveLikelyAvailable,
+        currentRound: game.currentRound,
+        maxRound,
+        trainingDoneThisRound,
+        hasSelectedFixture: Boolean(nextUserFixture),
+        lowFitnessPlayersCount: lowFitnessPlayers.length,
+        injuredPlayersCount: injuredPlayers.length,
+        expiringContractsCount: expiringContracts.length,
+        expiredContractsCount: expiredContracts.length,
+        boardSackRiskPercent: game.boardState.sackRiskPercent,
+        inboxUnreadCount: inboxSummary.unreadCount,
+        lastSaveStatus: saveStatus,
+      }),
+    [
+      game.notificationSettings,
+      notificationPermission,
+      pwaServiceWorkerStatus,
+      pwaInstalled,
+      authSession,
+      localSaveAvailable,
+      cloudSaveLikelyAvailable,
+      game.currentRound,
+      maxRound,
+      trainingDoneThisRound,
+      nextUserFixture,
+      lowFitnessPlayers.length,
+      injuredPlayers.length,
+      expiringContracts.length,
+      expiredContracts.length,
+      game.boardState.sackRiskPercent,
+      inboxSummary.unreadCount,
+      saveStatus,
+    ],
+  );
+
   const managerDashboard = useMemo(
     () =>
       buildManagerDashboard({
@@ -892,9 +1666,74 @@ export default function App() {
     ],
   );
 
+  const managerNavigation = useMemo(
+    () =>
+      buildManagerNavigationReport({
+        team: userTeam,
+        formation: game.userTactic.formation,
+        currentRound: game.currentRound,
+        maxRound,
+        seasonFinished,
+        nextMatchAvailable: Boolean(nextUserFixture),
+        trainingDoneThisRound,
+        unreadInboxCount: inboxSummary.unreadCount,
+        transferBudget: game.transferBudget,
+        cashBalance: game.finance.cashBalance,
+      }),
+    [
+      userTeam,
+      game.userTactic.formation,
+      game.currentRound,
+      maxRound,
+      seasonFinished,
+      nextUserFixture,
+      trainingDoneThisRound,
+      inboxSummary.unreadCount,
+      game.transferBudget,
+      game.finance.cashBalance,
+    ],
+  );
+
   function setTemporaryStatus(status: SaveStatus) {
     setSaveStatus(status);
     setErrorMessage("");
+  }
+
+  function handleMarkInboxMessageRead(messageId: string) {
+    setGame((previous) => ({
+      ...previous,
+      inboxMessages: markInboxMessageRead(previous.inboxMessages, messageId),
+    }));
+  }
+
+  function handleMarkAllInboxRead() {
+    setGame((previous) => ({
+      ...previous,
+      inboxMessages: markAllInboxMessagesRead(previous.inboxMessages),
+    }));
+    setTemporaryStatus("Toate mesajele din inbox au fost marcate ca citite.");
+  }
+
+  function handleCreateClubSnapshotMessage() {
+    setGame((previous) => {
+      const position = Math.max(
+        1,
+        previous.standings.findIndex((row) => row.teamId === USER_TEAM_ID) + 1 || 1,
+      );
+      return {
+        ...previous,
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          buildClubSnapshotMessage({
+            seasonNumber: previous.seasonNumber,
+            round: previous.currentRound,
+            team: getUserTeam(previous.teams),
+            cashBalance: previous.finance.cashBalance,
+            position,
+          }),
+        ]),
+      };
+    });
+    setTemporaryStatus("Snapshot nou adaugat in inbox.");
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -976,6 +1815,22 @@ export default function App() {
         simulation.roundResults[simulation.roundResults.length - 1]?.fixture
           .id ?? previous.selectedFixtureId;
       const updatedUserTeam = getUserTeam(simulation.updatedTeams);
+      const sponsorshipIncome = calculateSponsorshipRoundIncome({
+        state: previous.sponsorships,
+        roundResults: simulation.roundResults,
+        standings: simulation.updatedStandings,
+        userTeamId: USER_TEAM_ID,
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
+      });
+      const facilityImpact = calculateFacilityRoundImpact({
+        facilities: previous.facilities,
+        userTeam: updatedUserTeam,
+        roundResults: simulation.roundResults,
+        standings: simulation.updatedStandings,
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
+      });
       const financeUpdate = applyRoundFinances({
         finance: previous.finance,
         userTeam: updatedUserTeam,
@@ -983,7 +1838,32 @@ export default function App() {
         standings: simulation.updatedStandings,
         seasonNumber: previous.seasonNumber,
         round: previous.currentRound,
-        academyCost: getAcademyRoundCost(previous.youthAcademy),
+        academyCost: getEffectiveAcademyRoundCost(
+          previous.youthAcademy,
+          getAcademyRoundCost(previous.youthAcademy),
+          previous.facilities,
+        ),
+        commercialIncome: applyDifficultyToMoney(sponsorshipIncome.totalIncome, previous.difficulty),
+        facilitiesIncome: applyDifficultyToMoney(facilityImpact.matchdayBoost + facilityImpact.commercialIncome, previous.difficulty),
+        facilitiesMaintenance: facilityImpact.maintenanceCost,
+        staffCost: applyDifficultyToCost(calculateStaffWageCost(previous.staff), previous.difficulty),
+      });
+      const mediaUpdate = buildRoundMediaMessage({
+        state: previous.media,
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
+        team: updatedUserTeam,
+        roundResults: simulation.roundResults,
+        standings: simulation.updatedStandings,
+      });
+      const fanUpdate = updateFanStateAfterRound({
+        state: previous.fans,
+        team: updatedUserTeam,
+        standings: simulation.updatedStandings,
+        facilities: previous.facilities,
+        roundResults: simulation.roundResults,
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
       });
 
       const nextState: GameState = {
@@ -1002,12 +1882,63 @@ export default function App() {
           financeUpdate.report,
           ...previous.financeHistory,
         ].slice(0, 24),
+        sponsorshipHistory: [
+          ...sponsorshipIncome.records,
+          ...previous.sponsorshipHistory,
+        ].slice(0, 24),
+        facilityHistory: [facilityImpact.record, ...previous.facilityHistory].slice(0, 24),
+        media: mediaUpdate.state,
+        fans: fanUpdate.state,
         selectedFixtureId: lastFixtureId,
       };
 
+      const reviewedBoard = evaluateBoardForGame(nextState, true);
+      const roundMessages = [
+        ...buildRoundNewsMessages({
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+          clubName: previous.clubProfile.name,
+          roundResults: simulation.roundResults,
+          standings: simulation.updatedStandings,
+          financeReport: financeUpdate.report,
+          statusReport: simulation.statusReport,
+          boardReview: reviewedBoard.reviews[0],
+          userTeamId: USER_TEAM_ID,
+        }),
+        ...sponsorshipIncome.records.map(buildSponsorshipNewsMessage),
+        buildFacilityNewsMessage(facilityImpact.record),
+        {
+          id: `media-s${previous.seasonNumber}-r${previous.currentRound}`,
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+          category: "media" as const,
+          tone: mediaUpdate.message.tone === "critical" ? "warning" as const : "info" as const,
+          title: mediaUpdate.message.headline,
+          body: mediaUpdate.message.body,
+          source: "media",
+          targetTab: "media",
+          createdAt: new Date().toISOString(),
+          read: false,
+        },
+        {
+          id: `fans-s${previous.seasonNumber}-r${previous.currentRound}`,
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+          category: "fans" as const,
+          tone: fanUpdate.state.happiness < 45 ? "warning" as const : "info" as const,
+          title: "Fan update",
+          body: fanUpdate.record.summary,
+          source: "fans",
+          targetTab: "fans",
+          createdAt: new Date().toISOString(),
+          read: false,
+        },
+      ];
+
       return {
         ...nextState,
-        boardState: evaluateBoardForGame(nextState, true),
+        boardState: reviewedBoard,
+        inboxMessages: addInboxMessages(previous.inboxMessages, roundMessages),
       };
     });
 
@@ -1025,6 +1956,11 @@ export default function App() {
       let nextStatusHistory = [...previous.statusHistory];
       let nextFinance = previous.finance;
       let nextFinanceHistory = [...previous.financeHistory];
+      let nextSponsorshipHistory = [...previous.sponsorshipHistory];
+      let nextFacilityHistory = [...previous.facilityHistory];
+      let nextMedia = previous.media;
+      let nextFans = previous.fans;
+      let nextInboxMessages = [...previous.inboxMessages];
       let round = previous.currentRound;
       let lastFixtureId = previous.selectedFixtureId;
       const finalRound = getMaxRound(previous.fixtures);
@@ -1040,6 +1976,22 @@ export default function App() {
         );
 
         const updatedUserTeam = getUserTeam(simulation.updatedTeams);
+        const sponsorshipIncome = calculateSponsorshipRoundIncome({
+          state: previous.sponsorships,
+          roundResults: simulation.roundResults,
+          standings: simulation.updatedStandings,
+          userTeamId: USER_TEAM_ID,
+          seasonNumber: previous.seasonNumber,
+          round,
+        });
+        const facilityImpact = calculateFacilityRoundImpact({
+          facilities: previous.facilities,
+          userTeam: updatedUserTeam,
+          roundResults: simulation.roundResults,
+          standings: simulation.updatedStandings,
+          seasonNumber: previous.seasonNumber,
+          round,
+        });
         const financeUpdate = applyRoundFinances({
           finance: nextFinance,
           userTeam: updatedUserTeam,
@@ -1047,7 +1999,32 @@ export default function App() {
           standings: simulation.updatedStandings,
           seasonNumber: previous.seasonNumber,
           round,
-          academyCost: getAcademyRoundCost(previous.youthAcademy),
+          academyCost: getEffectiveAcademyRoundCost(
+            previous.youthAcademy,
+            getAcademyRoundCost(previous.youthAcademy),
+            previous.facilities,
+          ),
+          commercialIncome: applyDifficultyToMoney(sponsorshipIncome.totalIncome, previous.difficulty),
+          facilitiesIncome: applyDifficultyToMoney(facilityImpact.matchdayBoost + facilityImpact.commercialIncome, previous.difficulty),
+          facilitiesMaintenance: facilityImpact.maintenanceCost,
+          staffCost: applyDifficultyToCost(calculateStaffWageCost(previous.staff), previous.difficulty),
+        });
+        const mediaUpdate = buildRoundMediaMessage({
+          state: nextMedia,
+          seasonNumber: previous.seasonNumber,
+          round,
+          team: updatedUserTeam,
+          roundResults: simulation.roundResults,
+          standings: simulation.updatedStandings,
+        });
+        const fanUpdate = updateFanStateAfterRound({
+          state: nextFans,
+          team: updatedUserTeam,
+          standings: simulation.updatedStandings,
+          facilities: previous.facilities,
+          roundResults: simulation.roundResults,
+          seasonNumber: previous.seasonNumber,
+          round,
         });
 
         nextTeams = simulation.updatedTeams;
@@ -1063,6 +2040,56 @@ export default function App() {
           financeUpdate.report,
           ...nextFinanceHistory,
         ].slice(0, 24);
+        nextSponsorshipHistory = [
+          ...sponsorshipIncome.records,
+          ...nextSponsorshipHistory,
+        ].slice(0, 24);
+        nextFacilityHistory = [facilityImpact.record, ...nextFacilityHistory].slice(0, 24);
+        nextMedia = mediaUpdate.state;
+        nextFans = fanUpdate.state;
+        nextInboxMessages = addInboxMessages(
+          nextInboxMessages,
+          [
+            ...buildRoundNewsMessages({
+              seasonNumber: previous.seasonNumber,
+              round,
+              clubName: previous.clubProfile.name,
+              roundResults: simulation.roundResults,
+              standings: simulation.updatedStandings,
+              financeReport: financeUpdate.report,
+              statusReport: simulation.statusReport,
+              userTeamId: USER_TEAM_ID,
+            }),
+            ...sponsorshipIncome.records.map(buildSponsorshipNewsMessage),
+            buildFacilityNewsMessage(facilityImpact.record),
+            {
+              id: `media-s${previous.seasonNumber}-r${round}`,
+              seasonNumber: previous.seasonNumber,
+              round,
+              category: "media" as const,
+              tone: mediaUpdate.message.tone === "critical" ? "warning" as const : "info" as const,
+              title: mediaUpdate.message.headline,
+              body: mediaUpdate.message.body,
+              source: "media",
+              targetTab: "media",
+              createdAt: new Date().toISOString(),
+              read: false,
+            },
+            {
+              id: `fans-s${previous.seasonNumber}-r${round}`,
+              seasonNumber: previous.seasonNumber,
+              round,
+              category: "fans" as const,
+              tone: fanUpdate.state.happiness < 45 ? "warning" as const : "info" as const,
+              title: "Fan update",
+              body: fanUpdate.record.summary,
+              source: "fans",
+              targetTab: "fans",
+              createdAt: new Date().toISOString(),
+              read: false,
+            },
+          ],
+        );
         lastFixtureId =
           simulation.roundResults[simulation.roundResults.length - 1]?.fixture
             .id ?? lastFixtureId;
@@ -1079,12 +2106,48 @@ export default function App() {
         statusHistory: nextStatusHistory,
         finance: nextFinance,
         financeHistory: nextFinanceHistory,
+        sponsorshipHistory: nextSponsorshipHistory,
+        facilityHistory: nextFacilityHistory,
+        media: nextMedia,
+        fans: nextFans,
         selectedFixtureId: lastFixtureId,
       };
 
+      const reviewedBoard = evaluateBoardForGame(nextState, true);
+      const finalUserPosition = Math.max(
+        1,
+        nextStandings.findIndex((row) => row.teamId === USER_TEAM_ID) + 1 || 1,
+      );
+      const finalMessages = addInboxMessages(nextInboxMessages, [
+        buildClubSnapshotMessage({
+          seasonNumber: previous.seasonNumber,
+          round: finalRound,
+          team: getUserTeam(nextTeams),
+          cashBalance: nextFinance.cashBalance,
+          position: finalUserPosition,
+        }),
+      ]);
+
       return {
         ...nextState,
-        boardState: evaluateBoardForGame(nextState, true),
+        boardState: reviewedBoard,
+        inboxMessages: addInboxMessages(finalMessages, reviewedBoard.reviews[0]
+          ? [
+              {
+                id: `board-season-s${previous.seasonNumber}-${reviewedBoard.reviews[0].id}`,
+                seasonNumber: previous.seasonNumber,
+                round: finalRound,
+                category: "board",
+                tone: reviewedBoard.reviews[0].sackRiskPercent >= 55 ? "danger" : reviewedBoard.reviews[0].sackRiskPercent >= 30 ? "warning" : "info",
+                title: `Board review: job security ${reviewedBoard.reviews[0].jobSecurity}`,
+                body: reviewedBoard.reviews[0].summary,
+                source: "board",
+                targetTab: "board",
+                createdAt: new Date().toISOString(),
+                read: false,
+              },
+            ]
+          : []),
       };
     });
 
@@ -1124,6 +2187,33 @@ export default function App() {
           ? { ...row, teamName: previous.clubProfile.name }
           : row,
       );
+      const nextBoardState = createInitialBoardState(
+        nextSeason.seasonNumber,
+        previous.boardState.managerReputation,
+      );
+      const sponsorshipExpiry = expireSponsorshipDeals({
+        state: previous.sponsorships,
+        nextSeasonNumber: nextSeason.seasonNumber,
+        round: 1,
+      });
+      const sponsorshipRefresh = refreshSponsorshipOffers({
+        state: sponsorshipExpiry.state,
+        team: getUserTeam(finalTeams),
+        seasonNumber: nextSeason.seasonNumber,
+        round: 1,
+        boardConfidence: nextBoardState.jobSecurity,
+      });
+      const facilitiesReset = prepareFacilitiesForNewSeason(
+        previous.facilities,
+        nextSeason.seasonNumber,
+      );
+      const staffRefresh = refreshStaffCandidates({
+        state: previous.staff,
+        seasonNumber: nextSeason.seasonNumber,
+        round: 1,
+        team: getUserTeam(finalTeams),
+        extraBoost: previous.seasonHistory.length > 0 ? 1 : 0,
+      });
 
       return {
         ...previous,
@@ -1153,10 +2243,20 @@ export default function App() {
         ].slice(0, 24),
         cupState: createInitialCupState(finalTeams, nextSeason.seasonNumber),
         cupHistory: previous.cupHistory.slice(0, 12),
-        boardState: createInitialBoardState(
-          nextSeason.seasonNumber,
-          previous.boardState.managerReputation,
-        ),
+        europeanState: createInitialEuropeanCompetitionState(finalTeams, nextSeason.seasonNumber),
+        europeanHistory: previous.europeanHistory.slice(0, 12),
+        boardState: nextBoardState,
+        sponsorships: sponsorshipRefresh.state,
+        sponsorshipHistory: [
+          sponsorshipRefresh.record,
+          ...sponsorshipExpiry.records,
+          ...previous.sponsorshipHistory,
+        ].slice(0, 24),
+        facilities: facilitiesReset.facilities,
+        facilityHistory: [facilitiesReset.record, ...previous.facilityHistory].slice(0, 24),
+        staff: staffRefresh.state,
+        media: createInitialMediaState(nextSeason.seasonNumber, previous.clubProfile.name),
+        fans: createInitialFanState(getUserTeam(finalTeams)),
         teams: finalTeams,
         fixtures: applyClubProfileToFixtures(
           finalFixtures,
@@ -1165,6 +2265,34 @@ export default function App() {
         results: [],
         standings: finalStandings,
         selectedFixtureId: undefined,
+        inboxMessages: addInboxMessages(
+          previous.inboxMessages,
+          [
+            ...buildSeasonNewsMessages(nextSeason.seasonRecord),
+            ...contractResolution.records.map(buildContractNewsMessage),
+            ...sponsorshipExpiry.records.map(buildSponsorshipNewsMessage),
+            buildSponsorshipNewsMessage(sponsorshipRefresh.record),
+            buildFacilityNewsMessage(facilitiesReset.record),
+            {
+              id: `staff-refresh-s${nextSeason.seasonNumber}-r1`,
+              seasonNumber: nextSeason.seasonNumber,
+              round: 1,
+              category: "system" as const,
+              tone: "info" as const,
+              title: "Staff shortlist refreshed",
+              body: staffRefresh.record.summary,
+              source: "staff",
+              targetTab: "staff",
+              createdAt: new Date().toISOString(),
+              read: false,
+            },
+            ...createWelcomeInboxMessages({
+              seasonNumber: nextSeason.seasonNumber,
+              clubName: previous.clubProfile.name,
+              city: previous.clubProfile.city,
+            }),
+          ],
+        ),
       };
     });
     setTemporaryStatus(
@@ -1220,9 +2348,31 @@ export default function App() {
           finance: nextFinance,
         };
 
+        const reviewedBoard = evaluateBoardForGame(nextState, true);
+
         return {
           ...nextState,
-          boardState: evaluateBoardForGame(nextState, true),
+          boardState: reviewedBoard,
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildCupNewsMessage(cupSimulation.record),
+            ...(reviewedBoard.reviews[0]
+              ? [
+                  {
+                    id: `board-cup-s${previous.seasonNumber}-${reviewedBoard.reviews[0].id}`,
+                    seasonNumber: previous.seasonNumber,
+                    round: 100 + cupSimulation.record.roundIndex,
+                    category: "board" as const,
+                    tone: reviewedBoard.reviews[0].sackRiskPercent >= 55 ? "danger" as const : reviewedBoard.reviews[0].sackRiskPercent >= 30 ? "warning" as const : "info" as const,
+                    title: `Board review: job security ${reviewedBoard.reviews[0].jobSecurity}`,
+                    body: reviewedBoard.reviews[0].summary,
+                    source: "board",
+                    targetTab: "board",
+                    createdAt: new Date().toISOString(),
+                    read: false,
+                  },
+                ]
+              : []),
+          ]),
         };
       } catch (error) {
         setErrorMessage(
@@ -1238,11 +2388,132 @@ export default function App() {
     setActiveTab("cup");
   }
 
+  function simulateNextEuropeanRound() {
+    if (game.europeanState.status === "completed") {
+      setErrorMessage("Competitia europeana este deja terminata pentru sezonul curent.");
+      setSaveStatus("");
+      return;
+    }
+
+    setGame((previous) => {
+      try {
+        const europeanSimulation = simulateEuropeanRound({
+          state: previous.europeanState,
+          teams: previous.teams,
+          seasonNumber: previous.seasonNumber,
+          userTactic: previous.userTactic,
+        });
+
+        const nextFinance =
+          europeanSimulation.prizeMoney > 0
+            ? {
+                ...previous.finance,
+                cashBalance:
+                  previous.finance.cashBalance + europeanSimulation.prizeMoney,
+              }
+            : previous.finance;
+
+        setTemporaryStatus(europeanSimulation.record.summary);
+
+        const nextState: GameState = {
+          ...previous,
+          europeanState: europeanSimulation.state,
+          europeanHistory: [
+            europeanSimulation.record,
+            ...previous.europeanHistory,
+          ].slice(0, 16),
+          teams: europeanSimulation.teams,
+          fixtures: updateUserTeamInFutureFixtures(
+            previous.fixtures,
+            getUserTeam(europeanSimulation.teams),
+          ),
+          statusHistory: [
+            europeanSimulation.statusReport,
+            ...previous.statusHistory,
+          ].slice(0, 12),
+          finance: nextFinance,
+        };
+
+        const reviewedBoard = evaluateBoardForGame(nextState, true);
+
+        return {
+          ...nextState,
+          boardState: reviewedBoard,
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            {
+              id: `europe-s${previous.seasonNumber}-r${europeanSimulation.record.roundIndex}`,
+              seasonNumber: previous.seasonNumber,
+              round: 120 + europeanSimulation.record.roundIndex,
+              category: "match" as const,
+              tone: europeanSimulation.record.userAdvanced ? "success" as const : europeanSimulation.record.userParticipated ? "warning" as const : "info" as const,
+              title: getEuropeanRoundLabel(europeanSimulation.record.roundName),
+              body: europeanSimulation.record.summary,
+              source: "europe",
+              targetTab: "europe",
+              createdAt: new Date().toISOString(),
+              read: false,
+            },
+            ...(reviewedBoard.reviews[0]
+              ? [
+                  {
+                    id: `board-europe-s${previous.seasonNumber}-${reviewedBoard.reviews[0].id}`,
+                    seasonNumber: previous.seasonNumber,
+                    round: 120 + europeanSimulation.record.roundIndex,
+                    category: "board" as const,
+                    tone: reviewedBoard.reviews[0].sackRiskPercent >= 55 ? "danger" as const : reviewedBoard.reviews[0].sackRiskPercent >= 30 ? "warning" as const : "info" as const,
+                    title: `Board review: job security ${reviewedBoard.reviews[0].jobSecurity}`,
+                    body: reviewedBoard.reviews[0].summary,
+                    source: "board",
+                    targetTab: "board",
+                    createdAt: new Date().toISOString(),
+                    read: false,
+                  },
+                ]
+              : []),
+          ]),
+        };
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Runda europeana nu a putut fi simulata.",
+        );
+        setSaveStatus("");
+        return previous;
+      }
+    });
+
+    setActiveTab("europe");
+  }
+
+
   function runBoardReview() {
-    setGame((previous) => ({
-      ...previous,
-      boardState: evaluateBoardForGame(previous, true),
-    }));
+    setGame((previous) => {
+      const reviewedBoard = evaluateBoardForGame(previous, true);
+      const review = reviewedBoard.reviews[0];
+
+      return {
+        ...previous,
+        boardState: reviewedBoard,
+        inboxMessages: review
+          ? addInboxMessages(previous.inboxMessages, [
+              {
+                id: `board-manual-s${previous.seasonNumber}-${review.id}`,
+                seasonNumber: previous.seasonNumber,
+                round: previous.currentRound,
+                category: "board" as const,
+                tone: review.sackRiskPercent >= 55 ? "danger" as const : review.sackRiskPercent >= 30 ? "warning" as const : "info" as const,
+                title: `Board review: job security ${review.jobSecurity}`,
+                body: review.summary,
+                source: "board",
+                targetTab: "board",
+                createdAt: new Date().toISOString(),
+                read: false,
+              },
+            ])
+          : previous.inboxMessages,
+      };
+    });
     setActiveTab("board");
     setTemporaryStatus(
       "Board review actualizat pentru starea curenta a clubului.",
@@ -1284,6 +2555,7 @@ export default function App() {
         previous.trainingFocus,
         previous.seasonNumber,
         previous.currentRound,
+        getFacilityTrainingBonus(previous.facilities) + buildStaffImpact(previous.staff).trainingBonus,
       );
 
       return {
@@ -1297,6 +2569,9 @@ export default function App() {
         ),
         lastTrainingRoundKey: updatedRoundKey,
         trainingHistory: [result, ...previous.trainingHistory].slice(0, 10),
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          buildTrainingNewsMessage(result),
+        ]),
       };
     });
 
@@ -1320,6 +2595,215 @@ export default function App() {
     );
   }
 
+  function handleRefreshSponsorshipOffers() {
+    setGame((previous) => {
+      const refresh = refreshSponsorshipOffers({
+        state: previous.sponsorships,
+        team: getUserTeam(previous.teams),
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
+        boardConfidence: previous.boardState.jobSecurity,
+      });
+
+      setTemporaryStatus(refresh.record.summary);
+
+      return {
+        ...previous,
+        sponsorships: refresh.state,
+        sponsorshipHistory: [
+          refresh.record,
+          ...previous.sponsorshipHistory,
+        ].slice(0, 24),
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          buildSponsorshipNewsMessage(refresh.record),
+        ]),
+      };
+    });
+
+    setActiveTab("sponsorships");
+  }
+
+  function handleSignSponsorshipDeal(offerId: string) {
+    setGame((previous) => {
+      try {
+        const signing = signSponsorshipDeal({
+          state: previous.sponsorships,
+          offerId,
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+          boardConfidence: previous.boardState.jobSecurity,
+        });
+
+        setTemporaryStatus(signing.record.summary);
+
+        return {
+          ...previous,
+          finance: {
+            ...previous.finance,
+            cashBalance: previous.finance.cashBalance + signing.signingBonus,
+          },
+          sponsorships: signing.state,
+          sponsorshipHistory: [
+            signing.record,
+            ...previous.sponsorshipHistory,
+          ].slice(0, 24),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildSponsorshipNewsMessage(signing.record),
+          ]),
+        };
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Sponsorizarea nu a putut fi semnata.",
+        );
+        setSaveStatus("");
+        return previous;
+      }
+    });
+
+    setActiveTab("sponsorships");
+  }
+
+  function handleUpgradeFacility(upgradeType: FacilityUpgradeType) {
+    setGame((previous) => {
+      try {
+        const upgrade = upgradeFacility({
+          facilities: previous.facilities,
+          upgradeType,
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+        });
+
+        if (previous.finance.cashBalance < upgrade.cost) {
+          throw new Error("Cash insuficient pentru upgrade-ul selectat.");
+        }
+
+        setTemporaryStatus(upgrade.record.summary);
+
+        return {
+          ...previous,
+          finance: {
+            ...previous.finance,
+            cashBalance: previous.finance.cashBalance - upgrade.cost,
+          },
+          facilities: upgrade.facilities,
+          facilityHistory: [upgrade.record, ...previous.facilityHistory].slice(0, 24),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildFacilityNewsMessage(upgrade.record),
+          ]),
+        };
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Upgrade-ul de facilitati nu a putut fi finalizat.",
+        );
+        setSaveStatus("");
+        return previous;
+      }
+    });
+
+    setActiveTab("facilities");
+  }
+
+  function handleRefreshStaffCandidates() {
+    setGame((previous) => {
+      const refresh = refreshStaffCandidates({
+        state: previous.staff,
+        seasonNumber: previous.seasonNumber,
+        round: previous.currentRound,
+        team: getUserTeam(previous.teams),
+        extraBoost: previous.facilities.commercialZoneLevel,
+      });
+
+      setTemporaryStatus(refresh.record.summary);
+      return {
+        ...previous,
+        staff: refresh.state,
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          {
+            id: `staff-refresh-s${previous.seasonNumber}-r${previous.currentRound}`,
+            seasonNumber: previous.seasonNumber,
+            round: previous.currentRound,
+            category: "system" as const,
+            tone: "info" as const,
+            title: "Staff shortlist refreshed",
+            body: refresh.record.summary,
+            source: "staff",
+            targetTab: "staff",
+            createdAt: new Date().toISOString(),
+            read: false,
+          },
+        ]),
+      };
+    });
+    setActiveTab("staff");
+  }
+
+  function handleHireStaff(candidateId: string) {
+    setGame((previous) => {
+      try {
+        const hiring = hireStaffMember({
+          state: previous.staff,
+          candidateId,
+          seasonNumber: previous.seasonNumber,
+          round: previous.currentRound,
+        });
+        if (previous.finance.cashBalance < hiring.signingCost) {
+          throw new Error("Cash insuficient pentru signing bonus staff.");
+        }
+        setTemporaryStatus(hiring.record.summary);
+        return {
+          ...previous,
+          finance: {
+            ...previous.finance,
+            cashBalance: previous.finance.cashBalance - hiring.signingCost,
+          },
+          staff: hiring.state,
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            {
+              id: hiring.record.id,
+              seasonNumber: previous.seasonNumber,
+              round: previous.currentRound,
+              category: "system" as const,
+              tone: "success" as const,
+              title: `Staff hired: ${hiring.record.staffName}`,
+              body: hiring.record.summary,
+              source: "staff",
+              targetTab: "staff",
+              createdAt: new Date().toISOString(),
+              read: false,
+            },
+          ]),
+        };
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Staff-ul nu a putut fi angajat.");
+        setSaveStatus("");
+        return previous;
+      }
+    });
+    setActiveTab("staff");
+  }
+
+  function handleSetDifficulty(level: DifficultyLevel) {
+    setGame((previous) => ({
+      ...previous,
+      difficulty: { ...previous.difficulty, level },
+    }));
+    setTemporaryStatus(`Difficulty setat la ${getDifficultyLabel(level)}.`);
+    setActiveTab("difficulty");
+  }
+
+  function handlePressAnswer(answer: PressAnswer) {
+    setGame((previous) => ({
+      ...previous,
+      media: answerPressConference(previous.media, answer),
+    }));
+    setTemporaryStatus("Raspunsul de presa a fost inregistrat.");
+    setActiveTab("media");
+  }
+
   function handleScoutMarketPlayer(playerId: string) {
     setGame((previous) => {
       const player = previous.transferMarket.find(
@@ -1331,14 +2815,14 @@ export default function App() {
         return previous;
       }
 
-      const scoutCost = getMarketScoutingCost(player);
+      const scoutCost = getAdjustedScoutingCost(getMarketScoutingCost(player), buildStaffImpact(previous.staff));
       if (previous.finance.cashBalance < scoutCost) {
         setErrorMessage("Cash insuficient pentru raportul de scouting.");
         setSaveStatus("");
         return previous;
       }
 
-      const report = buildScoutReport({
+      const baseReport = buildScoutReport({
         player,
         team: getUserTeam(previous.teams),
         tactic: previous.userTactic,
@@ -1347,6 +2831,7 @@ export default function App() {
         seasonNumber: previous.seasonNumber,
         round: previous.currentRound,
       });
+      const report = { ...baseReport, scoutCost };
 
       setTemporaryStatus(
         `Raport scouting generat pentru ${report.playerName}: ${getRecommendationLabel(report.recommendation)}.`,
@@ -1363,6 +2848,9 @@ export default function App() {
           report,
           ...previous.scoutingHistory.filter((item) => item.id !== report.id),
         ].slice(0, 24),
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          buildScoutingNewsMessage(report),
+        ]),
       };
     });
 
@@ -1404,6 +2892,9 @@ export default function App() {
             0,
             20,
           ),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildTransferNewsMessage(transfer.record),
+          ]),
           teams: previous.teams.map((team) =>
             team.id === USER_TEAM_ID ? transfer.team : team,
           ),
@@ -1450,6 +2941,9 @@ export default function App() {
             0,
             20,
           ),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildTransferNewsMessage(transfer.record),
+          ]),
           teams: previous.teams.map((team) =>
             team.id === USER_TEAM_ID ? transfer.team : team,
           ),
@@ -1494,6 +2988,9 @@ export default function App() {
             0,
             24,
           ),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildContractNewsMessage(renewal.record),
+          ]),
           teams: previous.teams.map((team) =>
             team.id === USER_TEAM_ID ? renewal.team : team,
           ),
@@ -1536,6 +3033,9 @@ export default function App() {
             0,
             24,
           ),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildContractNewsMessage(release.record),
+          ]),
           teams: previous.teams.map((team) =>
             team.id === USER_TEAM_ID ? release.team : team,
           ),
@@ -1574,7 +3074,7 @@ export default function App() {
     }
 
     setGame((previous) => {
-      const cost = getScoutingCost(previous.youthAcademy);
+      const cost = getAdjustedScoutingCost(getScoutingCost(previous.youthAcademy), buildStaffImpact(previous.staff));
       if (previous.finance.cashBalance < cost) {
         setErrorMessage("Cash insuficient pentru scouting academy.");
         setSaveStatus("");
@@ -1596,9 +3096,12 @@ export default function App() {
         },
         youthAcademy: scouting.academy,
         youthAcademyHistory: [
-          scouting.record,
+          { ...scouting.record, cost },
           ...previous.youthAcademyHistory,
         ].slice(0, 24),
+        inboxMessages: addInboxMessages(previous.inboxMessages, [
+          buildAcademyNewsMessage({ ...scouting.record, cost }),
+        ]),
       };
     });
 
@@ -1637,6 +3140,9 @@ export default function App() {
             promotion.record,
             ...previous.youthAcademyHistory,
           ].slice(0, 24),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildAcademyNewsMessage(promotion.record),
+          ]),
           teams: previous.teams.map((team) =>
             team.id === USER_TEAM_ID ? promotion.team : team,
           ),
@@ -1687,6 +3193,9 @@ export default function App() {
             upgrade.record,
             ...previous.youthAcademyHistory,
           ].slice(0, 24),
+          inboxMessages: addInboxMessages(previous.inboxMessages, [
+            buildAcademyNewsMessage(upgrade.record),
+          ]),
         };
       } catch (error) {
         setErrorMessage(
@@ -1702,17 +3211,229 @@ export default function App() {
     setActiveTab("academy");
   }
 
+  function handleToggleLineupPlayer(playerId: string) {
+    setGame((previous) => {
+      const currentUserTeam = getUserTeam(previous.teams);
+      const currentIds = getSelectedLineupPlayerIds(
+        currentUserTeam,
+        previous.userTactic.formation,
+      );
+      const isSelected = currentIds.includes(playerId);
+
+      if (!isSelected && currentIds.length >= 11) {
+        setErrorMessage(
+          "Ai deja 11 titulari. Scoate un jucator inainte sa adaugi altul.",
+        );
+        setSaveStatus("");
+        return previous;
+      }
+
+      const nextIds = isSelected
+        ? currentIds.filter((id) => id !== playerId)
+        : [...currentIds, playerId];
+      const updatedUserTeam = applyLineupSelectionToTeam(
+        currentUserTeam,
+        nextIds,
+      );
+
+      setTemporaryStatus(
+        isSelected
+          ? "Jucator scos din primul 11."
+          : "Jucator adaugat in primul 11.",
+      );
+      setErrorMessage("");
+
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("lineup");
+  }
+
+  function handleAutoPickLineup() {
+    setGame((previous) => {
+      const updatedUserTeam = autoPickLineup(
+        getUserTeam(previous.teams),
+        previous.userTactic.formation,
+      );
+      setTemporaryStatus("Primul 11 a fost ales automat dupa forma, fitness si post.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("lineup");
+  }
+
+  function handleAutoPickSubstitutions() {
+    setGame((previous) => {
+      const updatedUserTeam = autoPickSubstitutionPlan(
+        getUserTeam(previous.teams),
+        previous.userTactic.formation,
+      );
+      setTemporaryStatus("Planul de schimbari a fost generat automat pentru repriza a doua.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("subs");
+  }
+
+  function handleClearSubstitutions() {
+    setGame((previous) => {
+      const updatedUserTeam = clearSubstitutionPlan(getUserTeam(previous.teams));
+      setTemporaryStatus("Planul de schimbari a fost sters.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("subs");
+  }
+
+  function handleAddManualSubstitution(instruction?: SubstitutionInstruction) {
+    const nextInstruction: SubstitutionInstruction = instruction ?? {
+      outPlayerId: subOutPlayerId,
+      inPlayerId: subInPlayerId,
+      minute: subMinute,
+      reason: "Schimbare planificata manual de manager.",
+    };
+
+    if (!nextInstruction.outPlayerId || !nextInstruction.inPlayerId) {
+      setErrorMessage("Alege jucatorul care iese si jucatorul care intra.");
+      setSaveStatus("");
+      setActiveTab("subs");
+      return;
+    }
+
+    if (nextInstruction.outPlayerId === nextInstruction.inPlayerId) {
+      setErrorMessage("Schimbarea trebuie sa aiba doi jucatori diferiti.");
+      setSaveStatus("");
+      setActiveTab("subs");
+      return;
+    }
+
+    setGame((previous) => {
+      const updatedUserTeam = addSubstitutionToTeam(
+        getUserTeam(previous.teams),
+        nextInstruction,
+      );
+      setTemporaryStatus("Schimbare adaugata in planul pentru urmatorul meci.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setSubOutPlayerId("");
+    setSubInPlayerId("");
+    setSubMinute(60);
+    setActiveTab("subs");
+  }
+
+  function handleAutoPickSetPieces() {
+    setGame((previous) => {
+      const updatedUserTeam = autoPickSetPieces(
+        getUserTeam(previous.teams),
+        previous.userTactic.formation,
+      );
+      setTemporaryStatus("Set pieces si capitanul au fost alese automat.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("setpieces");
+  }
+
+  function handleSetPieceAssignment(role: SetPieceRole, playerId: string) {
+    if (!playerId) {
+      setErrorMessage("Alege un jucator valid pentru rolul selectat.");
+      setSaveStatus("");
+      setActiveTab("setpieces");
+      return;
+    }
+
+    setGame((previous) => {
+      const updatedUserTeam = setSetPieceAssignment(
+        getUserTeam(previous.teams),
+        role,
+        playerId,
+        previous.userTactic.formation,
+      );
+      setTemporaryStatus("Rolul de faza fixa a fost actualizat.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(previous, updatedUserTeam);
+    });
+
+    setActiveTab("setpieces");
+  }
+
+  function handleApplyRecommendedMatchPlan() {
+    setGame((previous) => {
+      const futureFixture = previous.currentRound > getMaxRound(previous.fixtures)
+        ? undefined
+        : getRoundFixtures(previous.fixtures, previous.currentRound).find(
+            (fixture) =>
+              fixture.homeTeam.id === USER_TEAM_ID ||
+              fixture.awayTeam.id === USER_TEAM_ID,
+          );
+      const currentUserTeam = getUserTeam(previous.teams);
+      const report = buildOppositionScoutReport({
+        fixture: futureFixture,
+        userTeam: currentUserTeam,
+        userTactic: previous.userTactic,
+      });
+
+      if (!report.available) {
+        setErrorMessage("Nu exista un meci viitor disponibil pentru match prep.");
+        setSaveStatus("");
+        return previous;
+      }
+
+      const updatedUserTeam = autoPickSetPieces(
+        autoPickLineup(currentUserTeam, report.recommendedTactic.formation),
+        report.recommendedTactic.formation,
+      );
+
+      setTemporaryStatus("Planul recomandat de scout a fost aplicat tacticii si primului 11.");
+      setErrorMessage("");
+      return applyUserTeamUpdate(
+        {
+          ...previous,
+          userTactic: report.recommendedTactic,
+        },
+        updatedUserTeam,
+      );
+    });
+
+    setActiveTab("prep");
+  }
+
   function updateTactic<Key extends keyof Tactic>(
     key: Key,
     value: Tactic[Key],
   ) {
-    setGame((previous) => ({
-      ...previous,
-      userTactic: {
+    setGame((previous) => {
+      const nextTactic = {
         ...previous.userTactic,
         [key]: value,
-      },
-    }));
+      };
+
+      if (key !== "formation") {
+        return {
+          ...previous,
+          userTactic: nextTactic,
+        };
+      }
+
+      const updatedUserTeam = autoPickSetPieces(
+        autoPickLineup(getUserTeam(previous.teams), nextTactic.formation),
+        nextTactic.formation,
+      );
+
+      return applyUserTeamUpdate(
+        {
+          ...previous,
+          userTactic: nextTactic,
+        },
+        updatedUserTeam,
+      );
+    });
   }
 
   function updateClubDraft<Key extends keyof ClubProfile>(
@@ -1864,6 +3585,34 @@ export default function App() {
     }
   }
 
+  async function handleSyncRealDatabase() {
+    if (!authSession) {
+      setErrorMessage("Trebuie sa fii logat ca sa sincronizezi tabelele reale.");
+      setDatabaseSyncStatus("");
+      return;
+    }
+
+    try {
+      const result = await syncRealDatabaseSnapshot(
+        authSession.user.id,
+        authSession.accessToken,
+        getSavePayload(game, authSession.user.id),
+      );
+      setDatabaseSyncStatus(
+        `Real DB sync OK: ${result.totalRows} rows in ${result.tables.length} tables.`,
+      );
+      setTemporaryStatus("Real Database Mode mirror sincronizat.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Nu am putut sincroniza Real Database Mode.",
+      );
+      setDatabaseSyncStatus("");
+      setSaveStatus("");
+    }
+  }
+
   async function handleLoadSupabase() {
     if (!authSession) {
       setErrorMessage("Trebuie sa fii logat ca sa incarci din Supabase.");
@@ -1957,6 +3706,125 @@ export default function App() {
       );
       setSaveStatus("");
     }
+  }
+
+  function handleDownloadReleaseSave() {
+    try {
+      const exportPayload = {
+        appVersion: APP_VERSION,
+        saveSchemaVersion: SAVE_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        note: "Portable save export. Nu include parola sau Supabase access token.",
+        savePayload: currentSavePayload,
+      };
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = betaPolishRelease.exportFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setTemporaryStatus(`Save export descarcat: ${betaPolishRelease.exportFilename}.`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Nu am putut genera exportul save.",
+      );
+      setSaveStatus("");
+    }
+  }
+
+  async function handleCopyReleaseNotes() {
+    const notes = [
+      `Football Manager Lite v${APP_VERSION}`,
+      `Release status: ${betaPolishRelease.statusLabel} (${betaPolishRelease.score}/100)`,
+      "",
+      ...betaPolishRelease.releaseNotes.map((item) => `- ${item}`),
+      "",
+      "QA commands:",
+      ...betaPolishRelease.qaCommands.map((item) => `- ${item}`),
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(notes);
+      setTemporaryStatus("Release notes copiate in clipboard.");
+    } catch {
+      setErrorMessage("Nu am putut copia automat release notes.");
+      setSaveStatus("");
+    }
+  }
+
+  function handleUpdateNotificationSetting(
+    key: keyof NotificationSettings,
+    value: boolean,
+  ) {
+    setGame((previous) => ({
+      ...previous,
+      notificationSettings: {
+        ...previous.notificationSettings,
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleRequestNotificationPermission() {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setErrorMessage("Browserul curent nu suporta Notification API.");
+      setSaveStatus("");
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission as BrowserNotificationPermission);
+      if (permission === "granted") {
+        setGame((previous) => ({
+          ...previous,
+          notificationSettings: {
+            ...previous.notificationSettings,
+            enabled: true,
+          },
+        }));
+        setTemporaryStatus("Notificarile browser au fost activate.");
+      } else {
+        setTemporaryStatus(`Permisiune notificari: ${permission}. In-app reminders raman disponibile.`);
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Nu am putut cere permisiunea de notificari.");
+      setSaveStatus("");
+    }
+  }
+
+  function handleSendTestNotification() {
+    const title = "Football Manager Lite";
+    const body = notificationCenter.reminders[0]?.summary ?? "Notification Center test OK.";
+
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/icons/icon.svg",
+        tag: "football-manager-lite-test",
+      });
+      setTemporaryStatus("Notificare test trimisa catre browser/PWA.");
+      return;
+    }
+
+    setTemporaryStatus("Test in-app OK. Pentru notificari browser, apasa Request permission si permite notificarile.");
+  }
+
+  function handleArchiveNotificationReminders() {
+    setGame((previous) => ({
+      ...previous,
+      notificationHistory: [
+        ...notificationCenter.reminders.map((item) => ({ ...item, read: true })),
+        ...previous.notificationHistory,
+      ].slice(0, 50),
+    }));
+    setTemporaryStatus("Reminder-ele curente au fost arhivate in save payload.");
   }
 
   const nextRoundFixtures = seasonFinished
@@ -2206,127 +4074,27 @@ export default function App() {
         </div>
       </section>
 
-      <nav className="tabs" aria-label="Main navigation">
-        <button
-          className={activeTab === "dashboard" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("dashboard")}
-        >
-          Dashboard
-        </button>
-        <button
-          className={activeTab === "board" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("board")}
-        >
-          Board
-        </button>
-        <button
-          className={activeTab === "squad" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("squad")}
-        >
-          Squad
-        </button>
-        <button
-          className={activeTab === "training" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("training")}
-        >
-          Training
-        </button>
-        <button
-          className={activeTab === "medical" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("medical")}
-        >
-          Fitness
-        </button>
-        <button
-          className={activeTab === "transfers" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("transfers")}
-        >
-          Transfers
-        </button>
-        <button
-          className={activeTab === "scouting" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("scouting")}
-        >
-          Scouting
-        </button>
-        <button
-          className={activeTab === "finance" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("finance")}
-        >
-          Finance
-        </button>
-        <button
-          className={activeTab === "contracts" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("contracts")}
-        >
-          Contracts
-        </button>
-        <button
-          className={activeTab === "academy" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("academy")}
-        >
-          Academy
-        </button>
-        <button
-          className={activeTab === "seasons" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("seasons")}
-        >
-          Seasons
-        </button>
-        <button
-          className={activeTab === "cup" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("cup")}
-        >
-          Cup
-        </button>
-        <button
-          className={activeTab === "tactics" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("tactics")}
-        >
-          Tactics
-        </button>
-        <button
-          className={activeTab === "match" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("match")}
-        >
-          Meci curent
-        </button>
-        <button
-          className={activeTab === "fixtures" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("fixtures")}
-        >
-          Program
-        </button>
-        <button
-          className={activeTab === "standings" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("standings")}
-        >
-          Clasament
-        </button>
-        <button
-          className={activeTab === "help" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("help")}
-        >
-          Help
-        </button>
-        <button
-          className={activeTab === "beta" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("beta")}
-        >
-          Beta
-        </button>
-        <button
-          className={activeTab === "qa" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("qa")}
-        >
-          QA Live
-        </button>
-        <button
-          className={activeTab === "admin" ? "tab active" : "tab"}
-          onClick={() => setActiveTab("admin")}
-        >
-          Admin
-        </button>
+      <nav className="tabs grouped-tabs" aria-label="Main navigation">
+        {managerNavigation.groups.map((group) => (
+          <div className="nav-group" key={group.id}>
+            <span className="nav-group-label">{group.label}</span>
+            <div className="nav-group-tabs">
+              {group.tabs.map((item) => {
+                const badge = item.tab === "inbox" && inboxSummary.unreadCount > 0 ? ` (${inboxSummary.unreadCount})` : "";
+                return (
+                  <button
+                    key={item.tab}
+                    className={activeTab === item.tab ? "tab active" : "tab"}
+                    onClick={() => setActiveTab(item.tab as Tab)}
+                    title={group.description}
+                  >
+                    {item.compactLabel ?? item.label}{badge}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {activeTab === "dashboard" && (
@@ -2416,6 +4184,10 @@ export default function App() {
                 <strong>{game.boardState.jobSecurity}</strong>
               </div>
               <div className="metric">
+                <span>Inbox necitite</span>
+                <strong>{inboxSummary.unreadCount}</strong>
+              </div>
+              <div className="metric">
                 <span>Sack risk</span>
                 <strong>{game.boardState.sackRiskPercent}%</strong>
               </div>
@@ -2492,6 +4264,12 @@ export default function App() {
               </button>
               <button
                 className="secondary-button"
+                onClick={() => setActiveTab("inbox")}
+              >
+                News Inbox
+              </button>
+              <button
+                className="secondary-button"
                 onClick={() => setActiveTab("board")}
               >
                 Board objectives
@@ -2534,6 +4312,63 @@ export default function App() {
               {formatMoney(game.transferBudget)}. Contracte:{" "}
               {contractRiskSummary}.
             </p>
+          </article>
+
+          <article className="panel manager-hub-panel">
+            <div className="section-header">
+              <div>
+                <h3>Manager hub</h3>
+                <p className="muted">
+                  Navigatie rapida si checklist pentru urmatoarea decizie.
+                </p>
+              </div>
+              <span className={managerNavigation.matchReadinessScore >= 80 ? "status-pill ok" : "status-pill warning"}>
+                {managerNavigation.matchReadinessLabel}
+              </span>
+            </div>
+
+            <div className="manager-hub-score">
+              <div>
+                <span>Match readiness</span>
+                <strong>{managerNavigation.matchReadinessScore}%</strong>
+              </div>
+              <div className="progress-track" aria-label="Match readiness progress">
+                <i style={{ width: `${managerNavigation.matchReadinessScore}%` }} />
+              </div>
+              <p className="muted small-note">{managerNavigation.summary}</p>
+            </div>
+
+            <div className="quick-action-grid">
+              {managerNavigation.quickActions.map((action) => (
+                <button
+                  type="button"
+                  className={`quick-action-card ${action.priority}`}
+                  key={action.id}
+                  onClick={() => setActiveTab(action.targetTab as Tab)}
+                >
+                  <span>{action.priority}</span>
+                  <strong>{action.label}</strong>
+                  <small>{action.description}</small>
+                </button>
+              ))}
+            </div>
+
+            <div className="manager-checklist">
+              {managerNavigation.checklist.map((item) => (
+                <button
+                  type="button"
+                  className={`checklist-row ${item.ready ? "ready" : "review"}`}
+                  key={item.id}
+                  onClick={() => setActiveTab(item.targetTab as Tab)}
+                >
+                  <span>{item.ready ? "✓" : "!"}</span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.detail}</small>
+                  </div>
+                </button>
+              ))}
+            </div>
           </article>
 
           <article className="panel onboarding-panel">
@@ -2863,6 +4698,317 @@ export default function App() {
         </section>
       )}
 
+      {activeTab === "inbox" && (
+        <section className="dashboard-grid inbox-grid">
+          <article className="panel highlight-panel inbox-hero">
+            <span className="team-label">News Inbox</span>
+            <h2>Manager messages</h2>
+            <p className="muted">
+              Mesaje automate despre meciuri, board, transferuri, scouting,
+              academie, cupa, finante si sezoane. Totul se salveaza in payload
+              per user.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Total mesaje</span>
+                <strong>{inboxSummary.totalCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Necitite</span>
+                <strong>{inboxSummary.unreadCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Urgente</span>
+                <strong>{inboxSummary.urgentCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Ultima stire</span>
+                <strong>{inboxSummary.latestHeadline}</strong>
+              </div>
+            </div>
+            <div className="save-actions transfer-actions">
+              <button type="button" onClick={handleMarkAllInboxRead}>
+                Marcheaza tot ca citit
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleCreateClubSnapshotMessage}
+              >
+                Genereaza snapshot
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Categorii</h3>
+            {inboxSummary.categories.length === 0 ? (
+              <p className="muted">Inbox-ul este gol momentan.</p>
+            ) : (
+              <div className="mini-list">
+                {inboxSummary.categories.map((item) => (
+                  <div className="mini-row" key={item.category}>
+                    <span>{item.label}</span>
+                    <strong>
+                      {item.count} mesaje · {item.unreadCount} necitite
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Ultimele mesaje</h3>
+                <p className="muted">
+                  Apasa pe un mesaj ca sa il marchezi citit si sa mergi la tabul
+                  relevant.
+                </p>
+              </div>
+              <span className="status-pill">
+                {latestInboxMessages.length} afisate
+              </span>
+            </div>
+            {latestInboxMessages.length === 0 ? (
+              <p className="muted">
+                Nu exista mesaje. Simuleaza o etapa sau genereaza un snapshot.
+              </p>
+            ) : (
+              <div className="inbox-list">
+                {latestInboxMessages.map((message) => (
+                  <button
+                    type="button"
+                    className={`inbox-message ${message.tone} ${message.read ? "read" : "unread"}`}
+                    key={message.id}
+                    onClick={() => {
+                      handleMarkInboxMessageRead(message.id);
+                      setActiveTab(message.targetTab as Tab);
+                    }}
+                  >
+                    <div className="inbox-message-header">
+                      <span className={`status-badge ${message.tone}`}>
+                        {getInboxCategoryLabel(message.category)}
+                      </span>
+                      <small>
+                        S{message.seasonNumber} · R{message.round} · {message.read ? "citit" : "nou"}
+                      </small>
+                    </div>
+                    <strong>{message.title}</strong>
+                    <p>{message.body}</p>
+                    <small className="muted">Sursa: {message.source}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Flux complet</h3>
+                <p className="muted">
+                  Istoricul este limitat la ultimele mesaje ca save-ul sa ramana
+                  rapid pentru localStorage si Supabase.
+                </p>
+              </div>
+              <span className="status-pill ok">max 90 mesaje</span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Stare</th>
+                    <th>Categorie</th>
+                    <th>Titlu</th>
+                    <th>Sezon</th>
+                    <th>Runda</th>
+                    <th>Actiune</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {game.inboxMessages.map((message) => (
+                    <tr key={message.id}>
+                      <td>{message.read ? "Citit" : "Nou"}</td>
+                      <td>{getInboxCategoryLabel(message.category)}</td>
+                      <td>{message.title}</td>
+                      <td>{message.seasonNumber}</td>
+                      <td>{message.round}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="table-action-button"
+                          onClick={() => {
+                            handleMarkInboxMessageRead(message.id);
+                            setActiveTab(message.targetTab as Tab);
+                          }}
+                        >
+                          Deschide
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "league" && (
+        <section className="dashboard-grid league-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">League expansion</span>
+            <h2>{leagueOverview.leagueName}</h2>
+            <p className="muted">
+              Liga are identitate proprie: orase, stadioane, rivalitati, stiluri
+              tactice AI si obiective diferite pentru fiecare club.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Teams</span>
+                <strong>{leagueOverview.totalTeams}</strong>
+              </div>
+              <div className="metric">
+                <span>Rounds</span>
+                <strong>{leagueOverview.totalRounds}</strong>
+              </div>
+              <div className="metric">
+                <span>Your position</span>
+                <strong>#{leagueOverview.userClubPosition ?? "-"}</strong>
+              </div>
+              <div className="metric">
+                <span>Your tier</span>
+                <strong>
+                  {leagueOverview.userClubTier
+                    ? getLeagueTierLabel(leagueOverview.userClubTier)
+                    : "-"}
+                </strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>League stories</h3>
+            <div className="beta-action-list">
+              <div className="beta-action">
+                <span>1</span>
+                <p>{leagueOverview.titleRaceSummary}</p>
+              </div>
+              <div className="beta-action">
+                <span>2</span>
+                <p>{leagueOverview.pressureZoneSummary}</p>
+              </div>
+              {leagueOverview.fixtureOfTheWeek && (
+                <div className="beta-action">
+                  <span>3</span>
+                  <p>
+                    {leagueOverview.fixtureOfTheWeek.headline}: {" "}
+                    {leagueOverview.fixtureOfTheWeek.homeTeamName} vs {" "}
+                    {leagueOverview.fixtureOfTheWeek.awayTeamName} · importance {" "}
+                    {leagueOverview.fixtureOfTheWeek.importance}/100
+                  </p>
+                </div>
+              )}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Club identities</h3>
+                <p className="muted">
+                  Fiecare club are oras, stadion, stil AI, ambitie si rivalitate.
+                  Aceste date se salveaza in cariera si ajuta liga sa para mai
+                  vie fara sa complicam build-ul Netlify.
+                </p>
+              </div>
+              <span className="status-pill ok">v{APP_VERSION}</span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Club</th>
+                    <th>City</th>
+                    <th>Stadium</th>
+                    <th>Style</th>
+                    <th>Ambition</th>
+                    <th>Tier</th>
+                    <th>Rival</th>
+                    <th>Form</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leagueOverview.teams.map((team) => (
+                    <tr
+                      className={team.isUserClub ? "user-row" : undefined}
+                      key={team.teamId}
+                    >
+                      <td>{team.position ?? "-"}</td>
+                      <td>
+                        <strong>{team.name}</strong>
+                        <br />
+                        <small>{team.shortName} · OVR {team.averageOverall}</small>
+                      </td>
+                      <td>{team.city}</td>
+                      <td>{team.stadium}</td>
+                      <td>{getTeamStyleLabel(team.tacticalStyle)}</td>
+                      <td>{getTeamAmbitionLabel(team.ambition)}</td>
+                      <td>{getLeagueTierLabel(team.tier)}</td>
+                      <td>{team.rivalTeamName ?? "-"}</td>
+                      <td>{team.formSummary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Rivalries</h3>
+                <p className="muted">
+                  Rivalitatile sunt folosite pentru storytelling, fixture of the
+                  week si viitoare module de news inbox.
+                </p>
+              </div>
+              <span className="status-pill ok">{leagueOverview.rivalries.length} rivalries</span>
+            </div>
+            <div className="beta-check-grid">
+              {leagueOverview.rivalries.map((rivalry) => (
+                <article className="beta-check-card pass" key={rivalry.id}>
+                  <span className="team-label">{rivalry.label}</span>
+                  <h4>
+                    {rivalry.teamA} vs {rivalry.teamB}
+                  </h4>
+                  <p className="muted">Intensity {rivalry.intensity}/100</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
       {activeTab === "board" && (
         <section className="dashboard-grid board-grid">
           <article className="panel highlight-panel board-summary-panel">
@@ -3133,6 +5279,8 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Jucator</th>
+                  <th>Nat</th>
+                  <th>Role</th>
                   <th>Pos</th>
                   <th>Age</th>
                   <th>OVR</th>
@@ -3159,6 +5307,8 @@ export default function App() {
                     key={player.id}
                   >
                     <td>{player.name}</td>
+                    <td>{player.flagEmoji ?? "🏳️"}</td>
+                    <td>{getRoleLabel(player.role)}</td>
                     <td>
                       <strong>{player.position}</strong>
                     </td>
@@ -3195,6 +5345,1592 @@ export default function App() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {activeTab === "lineup" && (
+        <section className="dashboard-grid lineup-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">Manual starting XI</span>
+            <h2>Primul 11 - {game.userTactic.formation}</h2>
+            <p className="muted">
+              Alege titularii pentru urmatorul meci. Engine-ul foloseste acesti
+              11 jucatori la forta echipei, suturi, goluri si cartonase.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Titulari</span>
+                <strong>{lineupReport.selectedPlayers.length}/11</strong>
+              </div>
+              <div className="metric">
+                <span>Scor lineup</span>
+                <strong>{lineupReport.score}/100</strong>
+              </div>
+              <div className="metric">
+                <span>Schema</span>
+                <strong>
+                  {lineupSlots.GK}-{lineupSlots.DEF}-{lineupSlots.MID}-{lineupSlots.ATT}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Overall activ</span>
+                <strong>{Math.round(teamStrength.overall)}</strong>
+              </div>
+              <div className="metric">
+                <span>Accidentati titulari</span>
+                <strong>
+                  {lineupReport.selectedPlayers.filter(isPlayerInjured).length}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Banca</span>
+                <strong>{lineupReport.benchPlayers.length}</strong>
+              </div>
+            </div>
+            <div className="save-actions">
+              <button type="button" onClick={handleAutoPickLineup}>
+                Auto-pick cel mai bun 11
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("tactics")}
+              >
+                Schimba tactica
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("subs")}
+              >
+                Plan schimbari
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Status lineup</h3>
+            <div className="stat-row">
+              <span>GK / DEF / MID / ATT</span>
+              <strong>
+                {lineupReport.positionCounts.GK} / {lineupReport.positionCounts.DEF} / {lineupReport.positionCounts.MID} / {lineupReport.positionCounts.ATT}
+              </strong>
+            </div>
+            <div className="stat-row">
+              <span>Validare</span>
+              <span
+                className={
+                  lineupReport.isValid
+                    ? "status-badge ok"
+                    : "status-badge warning"
+                }
+              >
+                {lineupReport.isValid ? "Ready" : "Needs attention"}
+              </span>
+            </div>
+            <p className="muted small-note">{lineupReport.summary}</p>
+            <div className="history-list compact-list">
+              {lineupReport.issues.map((issue) => (
+                <div className="history-item" key={issue.message}>
+                  <span className={`status-badge ${issue.severity}`}>
+                    {issue.severity}
+                  </span>
+                  <small>{issue.message}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Selectie jucatori</h3>
+                <p className="muted">
+                  Selecteaza maximum 11 jucatori. Posturile recomandate se
+                  bazeaza pe formatia activa.
+                </p>
+              </div>
+              <span className={lineupReport.isValid ? "status-pill ok" : "status-pill warning"}>
+                {game.userTactic.formation}
+              </span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Jucator</th>
+                    <th>Nat</th>
+                    <th>Pos</th>
+                    <th>OVR</th>
+                    <th>FIT</th>
+                    <th>MOR</th>
+                    <th>FORM</th>
+                    <th>Disponibilitate</th>
+                    <th>Actiune</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...userTeam.players]
+                    .sort((a, b) => {
+                      const selectedDelta =
+                        Number(selectedLineupIdSet.has(b.id)) -
+                        Number(selectedLineupIdSet.has(a.id));
+                      if (selectedDelta !== 0) return selectedDelta;
+                      if (a.position !== b.position) {
+                        return a.position.localeCompare(b.position);
+                      }
+                      return b.overall - a.overall;
+                    })
+                    .map((player) => {
+                      const selected = selectedLineupIdSet.has(player.id);
+                      return (
+                        <tr
+                          key={player.id}
+                          className={
+                            selected
+                              ? "selected-player-row"
+                              : isPlayerInjured(player) ||
+                                  (player.fitness ?? 100) < 55
+                                ? "player-alert-row"
+                                : undefined
+                          }
+                        >
+                          <td>
+                            <span
+                              className={
+                                selected
+                                  ? "status-badge ok"
+                                  : "status-badge warning"
+                              }
+                            >
+                              {selected ? "Titular" : "Banca"}
+                            </span>
+                          </td>
+                          <td>{player.name}</td>
+                          <td>{player.flagEmoji ?? "🏳️"}</td>
+                          <td>
+                            <strong>{player.position}</strong>
+                          </td>
+                          <td>
+                            <strong>{player.overall}</strong>
+                          </td>
+                          <td>{player.fitness ?? 100}</td>
+                          <td>{player.morale}</td>
+                          <td>{player.form}</td>
+                          <td>
+                            <span
+                              className={
+                                isPlayerInjured(player)
+                                  ? "status-badge danger"
+                                  : (player.fitness ?? 100) < 55
+                                    ? "status-badge warning"
+                                    : "status-badge ok"
+                              }
+                            >
+                              {getPlayerAvailabilityLabel(player)}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="secondary-button compact"
+                              onClick={() => handleToggleLineupPlayer(player.id)}
+                            >
+                              {selected ? "Scoate" : "Adauga"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "subs" && (
+        <section className="dashboard-grid lineup-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">v4.5 Substitutions</span>
+            <h2>Plan schimbari - banca activa</h2>
+            <p className="muted">
+              Pregateste pana la 3 schimbari pentru urmatorul meci. Engine-ul le
+              executa la minutul ales si jucatorii intrati pot aparea apoi la
+              suturi, goluri si cartonase.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Schimbari</span>
+                <strong>{substitutionReport.planned.length}/3</strong>
+              </div>
+              <div className="metric">
+                <span>Banca</span>
+                <strong>{substitutionReport.bench.length}</strong>
+              </div>
+              <div className="metric">
+                <span>Bench strength</span>
+                <strong>{substitutionReport.benchStrength}</strong>
+              </div>
+              <div className="metric">
+                <span>Impact estimat</span>
+                <strong>
+                  {substitutionReport.expectedImpact >= 0 ? "+" : ""}
+                  {substitutionReport.expectedImpact}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Status</span>
+                <strong>{substitutionReport.isValid ? "Ready" : "Review"}</strong>
+              </div>
+              <div className="metric">
+                <span>Formatia</span>
+                <strong>{game.userTactic.formation}</strong>
+              </div>
+            </div>
+            <div className="save-actions">
+              <button type="button" onClick={handleAutoPickSubstitutions}>
+                Auto-pick schimbari
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleClearSubstitutions}
+              >
+                Sterge planul
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("lineup")}
+              >
+                Inapoi la primul 11
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Status plan</h3>
+            <p className="muted small-note">{substitutionReport.summary}</p>
+            <div className="history-list compact-list">
+              {substitutionReport.issues.map((issue) => (
+                <div className="history-item" key={issue.message}>
+                  <span className={`status-badge ${issue.severity}`}>
+                    {issue.severity}
+                  </span>
+                  <small>{issue.message}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Adauga manual o schimbare</h3>
+                <p className="muted">
+                  Alege un titular care iese, o rezerva care intra si minutul.
+                  Schimbarile duplicate sunt inlocuite automat.
+                </p>
+              </div>
+              <span className={substitutionReport.isValid ? "status-pill ok" : "status-pill warning"}>
+                max 3
+              </span>
+            </div>
+            <div className="form-grid compact-form">
+              <label>
+                Iese
+                <select
+                  value={subOutPlayerId}
+                  onChange={(event) => setSubOutPlayerId(event.target.value)}
+                >
+                  <option value="">Alege titular</option>
+                  {substitutionReport.starters.map((player) => (
+                    <option value={player.id} key={player.id}>
+                      {player.name} · {player.position} · FIT {player.fitness ?? 100}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Intra
+                <select
+                  value={subInPlayerId}
+                  onChange={(event) => setSubInPlayerId(event.target.value)}
+                >
+                  <option value="">Alege rezerva</option>
+                  {substitutionReport.bench.map((player) => (
+                    <option value={player.id} key={player.id}>
+                      {player.name} · {player.position} · OVR {player.overall}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Minut
+                <input
+                  type="number"
+                  min="1"
+                  max="89"
+                  value={subMinute}
+                  onChange={(event) => setSubMinute(Number(event.target.value))}
+                />
+              </label>
+              <button type="button" onClick={() => handleAddManualSubstitution()}>
+                Adauga schimbare
+              </button>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Plan curent</h3>
+                <p className="muted">
+                  Aceste schimbari vor fi rulate in urmatorul meci oficial al
+                  echipei tale, inclusiv in simularea de etapa.
+                </p>
+              </div>
+              <span className="status-pill ok">
+                {normalizeSubstitutionPlan(userTeam).length} active
+              </span>
+            </div>
+            {substitutionReport.planned.length === 0 ? (
+              <p className="muted">Nu exista schimbari planificate.</p>
+            ) : (
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Min</th>
+                      <th>Iese</th>
+                      <th>Intra</th>
+                      <th>Motiv</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {substitutionReport.planned.map((item) => {
+                      const outPlayer = substitutionPlayerById.get(item.outPlayerId);
+                      const inPlayer = substitutionPlayerById.get(item.inPlayerId);
+                      return (
+                        <tr key={`${item.outPlayerId}-${item.inPlayerId}`}>
+                          <td>
+                            <strong>{item.minute}'</strong>
+                          </td>
+                          <td>
+                            {outPlayer?.name ?? "-"}
+                            <br />
+                            <small className="muted">
+                              {outPlayer?.position ?? "-"} · FIT {outPlayer?.fitness ?? 100}
+                            </small>
+                          </td>
+                          <td>
+                            {inPlayer?.name ?? "-"}
+                            <br />
+                            <small className="muted">
+                              {inPlayer?.position ?? "-"} · OVR {inPlayer?.overall ?? "-"}
+                            </small>
+                          </td>
+                          <td>{item.reason ?? "Rotatie planificata"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Recomandari de pe banca</h3>
+                <p className="muted">
+                  Sugestii calculate din fitness, stamina, forma, post si impact
+                  pentru finalul meciului.
+                </p>
+              </div>
+              <span className="status-pill ok">deterministic</span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Min</th>
+                    <th>Schimbare</th>
+                    <th>Post</th>
+                    <th>Impact</th>
+                    <th>Motiv</th>
+                    <th>Actiune</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {substitutionReport.recommendations.map((item) => (
+                    <tr key={`${item.outPlayerId}-${item.inPlayerId}`}>
+                      <td>{item.minute}'</td>
+                      <td>
+                        <strong>{item.inPlayerName}</strong> pentru {item.outPlayerName}
+                      </td>
+                      <td>{item.position}</td>
+                      <td>
+                        <span className={item.impact >= 0 ? "status-badge ok" : "status-badge warning"}>
+                          {item.impact >= 0 ? "+" : ""}{item.impact}
+                        </span>
+                      </td>
+                      <td>{item.reason}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary-button compact"
+                          onClick={() =>
+                            handleAddManualSubstitution({
+                              outPlayerId: item.outPlayerId,
+                              inPlayerId: item.inPlayerId,
+                              minute: item.minute,
+                              reason: item.reason,
+                            })
+                          }
+                        >
+                          Foloseste
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "setpieces" && (
+        <section className="dashboard-grid">
+          <article className="panel highlight-panel wide-panel">
+            <div className="section-header">
+              <div>
+                <p className="eyebrow">Set Pieces & Captain</p>
+                <h2>Specialisti pentru faze fixe</h2>
+                <p className="description">
+                  Alege capitanul, executantul de penalty-uri, lovituri libere si
+                  cornere. Match engine-ul foloseste specialistii activi din primul
+                  11, iar dupa schimbari alege automat cel mai bun jucator ramas pe teren.
+                </p>
+              </div>
+              <span className={setPieceReport.isValid ? "status-pill ok" : "status-pill warning"}>
+                v4.6
+              </span>
+            </div>
+            <div className="metric-grid">
+              <div className="metric">
+                <span>Specialist score</span>
+                <strong>{setPieceReport.specialistScore}</strong>
+              </div>
+              <div className="metric">
+                <span>Dead-ball threat</span>
+                <strong>{setPieceReport.deadBallThreat}</strong>
+              </div>
+              <div className="metric">
+                <span>Captain</span>
+                <strong>{setPieceReport.assignments[0]?.playerName ?? "-"}</strong>
+              </div>
+              <div className="metric">
+                <span>Status</span>
+                <strong>{setPieceReport.isValid ? "Ready" : "Review"}</strong>
+              </div>
+            </div>
+            <div className="save-actions">
+              <button type="button" onClick={handleAutoPickSetPieces}>
+                Auto-pick set pieces
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("lineup")}
+              >
+                Verifica primul 11
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("subs")}
+              >
+                Verifica schimbarile
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Status faze fixe</h3>
+            <p className="muted small-note">{setPieceReport.summary}</p>
+            <div className="history-list compact-list">
+              {setPieceReport.issues.map((issue) => (
+                <div className="history-item" key={issue.message}>
+                  <span className={`status-badge ${issue.severity}`}>
+                    {issue.severity}
+                  </span>
+                  <small>{issue.message}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Impact in meci</h3>
+            <p className="muted">
+              Loviturile libere pot genera suturi directe, iar cornerele pot crea
+              ocazii pentru fundasi, mijlocasi si atacanti. Daca un executant este
+              schimbat sau nu este titular, engine-ul foloseste automat cel mai bun
+              specialist ramas pe teren.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Formatia</span>
+                <strong>{game.userTactic.formation}</strong>
+              </div>
+              <div className="metric">
+                <span>Titulari</span>
+                <strong>{selectedLineupIds.length}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Atribuire roluri</h3>
+                <p className="muted">
+                  Recomandarea este ca executantii sa fie in primul 11 pentru urmatorul meci.
+                </p>
+              </div>
+              <span className="status-pill ok">{setPieceReport.assignments.length} roluri</span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rol</th>
+                    <th>Jucator</th>
+                    <th>Post</th>
+                    <th>Scor rol</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setPieceReport.assignments.map((assignment) => (
+                    <tr key={assignment.role}>
+                      <td>
+                        <strong>{assignment.label}</strong>
+                      </td>
+                      <td>
+                        <select
+                          value={assignment.playerId ?? ""}
+                          onChange={(event) =>
+                            handleSetPieceAssignment(assignment.role, event.target.value)
+                          }
+                        >
+                          {userTeam.players
+                            .slice()
+                            .sort((a, b) => {
+                              const starterDelta =
+                                Number(selectedLineupIdSet.has(b.id)) -
+                                Number(selectedLineupIdSet.has(a.id));
+                              if (starterDelta !== 0) return starterDelta;
+                              return (
+                                scorePlayerForSetPieceRole(b, assignment.role) -
+                                scorePlayerForSetPieceRole(a, assignment.role)
+                              );
+                            })
+                            .map((player) => (
+                              <option value={player.id} key={player.id}>
+                                {player.name} · {player.position} · {selectedLineupIdSet.has(player.id) ? "Titular" : "Banca"}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
+                      <td>{assignment.position ?? "-"}</td>
+                      <td>
+                        <span className={assignment.score >= 70 ? "status-badge ok" : "status-badge warning"}>
+                          {assignment.score}/100
+                        </span>
+                      </td>
+                      <td>
+                        {assignment.isStarter ? (
+                          <span className="status-badge ok">Titular</span>
+                        ) : (
+                          <span className="status-badge warning">Banca</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Top specialisti din lot</h3>
+                <p className="muted">
+                  Top 3 pentru fiecare rol, calculat din atribute, forma, moral,
+                  personalitate si picior preferat.
+                </p>
+              </div>
+              <span className="status-pill ok">deterministic</span>
+            </div>
+            <div className="card-grid three-columns">
+              {setPieceRoles.map((roleItem) => {
+                const topPlayers = userTeam.players
+                  .slice()
+                  .sort(
+                    (a, b) =>
+                      scorePlayerForSetPieceRole(b, roleItem.role) -
+                      scorePlayerForSetPieceRole(a, roleItem.role),
+                  )
+                  .slice(0, 3);
+
+                return (
+                  <div className="panel mini-card" key={roleItem.role}>
+                    <h4>{roleItem.label}</h4>
+                    <div className="history-list compact-list">
+                      {topPlayers.map((player) => (
+                        <div className="history-item" key={`${roleItem.role}-${player.id}`}>
+                          <div>
+                            <strong>{player.name}</strong>
+                            <br />
+                            <small className="muted">
+                              {player.position} · {selectedLineupIdSet.has(player.id) ? "Titular" : "Banca"}
+                            </small>
+                          </div>
+                          <span className="status-badge ok">
+                            {scorePlayerForSetPieceRole(player, roleItem.role)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "prep" && (
+        <section className="dashboard-grid matchday-grid">
+          <article className="panel highlight-panel wide-panel">
+            <div className="section-header">
+              <div>
+                <p className="eyebrow">Opposition Scout & Match Plan</p>
+                <h2>Pregatirea urmatorului meci</h2>
+                <p className="description">
+                  Analizeaza adversarul din etapa curenta, compara punctele forte
+                  si propune un plan tactic pe care il poti aplica direct inainte de simulare.
+                </p>
+              </div>
+              <span className={`status-pill ${oppositionScoutReport.risk === "high" ? "danger" : oppositionScoutReport.risk === "medium" ? "warning" : "ok"}`}>
+                v4.7
+              </span>
+            </div>
+
+            <div className="metric-grid">
+              <div className="metric">
+                <span>Meci</span>
+                <strong>{oppositionScoutReport.matchLabel}</strong>
+              </div>
+              <div className="metric">
+                <span>Adversar</span>
+                <strong>{oppositionScoutReport.opponentName ?? "-"}</strong>
+              </div>
+              <div className="metric">
+                <span>Risc</span>
+                <strong>{getMatchPlanRiskLabel(oppositionScoutReport.risk)}</strong>
+              </div>
+              <div className="metric">
+                <span>Readiness</span>
+                <strong>{oppositionScoutReport.readinessScore}/100</strong>
+              </div>
+            </div>
+
+            <p className="muted small-note">{oppositionScoutReport.summary}</p>
+            <div className="save-actions">
+              <button
+                type="button"
+                onClick={handleApplyRecommendedMatchPlan}
+                disabled={!oppositionScoutReport.available}
+              >
+                Aplica planul recomandat
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("tactics")}
+              >
+                Ajusteaza tactica manual
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setActiveTab("lineup")}
+              >
+                Verifica Lineup
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Comparatie forte</h3>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Overall tau</span>
+                <strong>{oppositionScoutReport.userStrength?.overall ?? "-"}</strong>
+              </div>
+              <div className="metric">
+                <span>Overall adversar</span>
+                <strong>{oppositionScoutReport.opponentStrength?.overall ?? "-"}</strong>
+              </div>
+              <div className="metric">
+                <span>Diferenta</span>
+                <strong>{oppositionScoutReport.strengthDelta > 0 ? "+" : ""}{oppositionScoutReport.strengthDelta}</strong>
+              </div>
+              <div className="metric">
+                <span>Stil adversar</span>
+                <strong>{oppositionScoutReport.opponentStyle ?? "-"}</strong>
+              </div>
+            </div>
+            <div className="mini-list">
+              <div className="mini-row">
+                <span>Tactica ta</span>
+                <strong>{getTacticLabel(game.userTactic)}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Tactica adversar</span>
+                <strong>{oppositionScoutReport.opponentTactic ? getTacticLabel(oppositionScoutReport.opponentTactic) : "-"}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Locatie</span>
+                <strong>{oppositionScoutReport.venue === "home" ? "Acasa" : oppositionScoutReport.venue === "away" ? "Deplasare" : "Neutru"}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Plan recomandat</h3>
+            <div className="mini-list">
+              <div className="mini-row">
+                <span>Formation</span>
+                <strong>{oppositionScoutReport.recommendedTactic.formation}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Mentality</span>
+                <strong>{oppositionScoutReport.recommendedTactic.mentality}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Pressing</span>
+                <strong>{oppositionScoutReport.recommendedTactic.pressing}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Advanced</span>
+                <strong>{oppositionScoutReport.recommendedTactic.tempo ?? "normal"} / {oppositionScoutReport.recommendedTactic.width ?? "balanced"}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Ajustari recomandate</h3>
+                <p className="muted">
+                  Fiecare ajustare are motiv tactic. Dupa aplicare, primul 11 si fazele fixe se regenereaza automat pentru noua formatie.
+                </p>
+              </div>
+              <span className="status-pill ok">{oppositionScoutReport.adjustments.length} recomandari</span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Zona</th>
+                    <th>Din</th>
+                    <th>In</th>
+                    <th>Motiv</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oppositionScoutReport.adjustments.map((item, index) => (
+                    <tr key={`${item.key}-${index}`}>
+                      <td><strong>{item.label}</strong></td>
+                      <td>{item.from ?? "-"}</td>
+                      <td>{item.to}</td>
+                      <td>{item.rationale}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Amenintari</h3>
+            <div className="history-list compact-list">
+              {oppositionScoutReport.threats.map((item) => (
+                <div className="history-item" key={item}>
+                  <span className="status-badge warning">Scout</span>
+                  <small>{item}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Oportunitati</h3>
+            <div className="history-list compact-list">
+              {oppositionScoutReport.opportunities.map((item) => (
+                <div className="history-item" key={item}>
+                  <span className="status-badge ok">Plan</span>
+                  <small>{item}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Checklist inainte de simulare</h3>
+            <div className="history-list compact-list">
+              {oppositionScoutReport.checklist.map((item) => (
+                <div className="history-item" key={item}>
+                  <span className={item.startsWith("Planul de meci") ? "status-badge ok" : "status-badge warning"}>
+                    Prep
+                  </span>
+                  <small>{item}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "portraits" && (
+        <section className="dashboard-grid portrait-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">v3.8 Pixel portraits</span>
+            <h2>{portraitGallery.totalPortraits} avataruri generate</h2>
+            <p className="muted">
+              Avatarurile sunt SVG pixel-art generate determinist din profilul
+              jucatorului, tara, personalitate, pozitie si culorile clubului.
+              Nu folosesc AI, API extern sau dependinte noi.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Captain frames</span>
+                <strong>{portraitGallery.captainFrames}</strong>
+              </div>
+              <div className="metric">
+                <span>Star frames</span>
+                <strong>{portraitGallery.starFrames}</strong>
+              </div>
+              <div className="metric">
+                <span>Academy frames</span>
+                <strong>{portraitGallery.academyFrames}</strong>
+              </div>
+              <div className="metric">
+                <span>Mood dominant</span>
+                <strong>{getPortraitMoodLabel(portraitGallery.dominantMood)}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Reguli generare</h3>
+            <div className="mini-list">
+              <div className="mini-row">
+                <span>Seed</span>
+                <strong>player.id + avatarSeed</strong>
+              </div>
+              <div className="mini-row">
+                <span>Kit</span>
+                <strong>Culorile clubului</strong>
+              </div>
+              <div className="mini-row">
+                <span>Frame</span>
+                <strong>Leader / Star / U21</strong>
+              </div>
+              <div className="mini-row">
+                <span>Output</span>
+                <strong>SVG data URI</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Portrait gallery</h3>
+                <p className="muted">
+                  Primele 12 profiluri sunt ordonate dupa marketability si OVR.
+                </p>
+              </div>
+              <span className="status-pill ok">Deterministic</span>
+            </div>
+            <div className="portrait-card-grid">
+              {portraitGallery.samplePortraits.map((portrait) => {
+                const player = userTeam.players.find(
+                  (item) => item.id === portrait.playerId,
+                );
+                return (
+                  <div className="portrait-card" key={portrait.playerId}>
+                    <img
+                      className="portrait-image"
+                      src={portrait.dataUri}
+                      alt={`Pixel portrait ${portrait.name}`}
+                    />
+                    <div>
+                      <strong>{portrait.name}</strong>
+                      <span>
+                        {player?.flagEmoji ?? "🏳️"} {player?.position} · OVR {player?.overall ?? "-"} · {getPortraitFrameLabel(portrait.frame)}
+                      </span>
+                      <small>
+                        {getPortraitMoodLabel(portrait.mood)} mood · {player?.nationality ?? "Unknown"} · Marketability {player?.marketability ?? 50}
+                      </small>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>All squad portraits</h3>
+                <p className="muted">
+                  Avatarurile sunt regenerabile la fiecare load din datele
+                  salvate ale jucatorului, deci nu maresc payload-ul Supabase.
+                </p>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Avatar</th>
+                    <th>Jucator</th>
+                    <th>Frame</th>
+                    <th>Mood</th>
+                    <th>Kit</th>
+                    <th>Tags</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userTeam.players.map((player) => {
+                    const portrait = buildPlayerPortrait(player, {
+                      primaryColor: game.clubProfile.primaryColor,
+                      secondaryColor: game.clubProfile.secondaryColor,
+                    });
+                    return (
+                      <tr key={player.id}>
+                        <td>
+                          <img
+                            className="portrait-table-thumb"
+                            src={portrait.dataUri}
+                            alt={`Pixel portrait ${player.name}`}
+                          />
+                        </td>
+                        <td>
+                          <strong>{player.name}</strong>
+                          <br />
+                          <small className="muted">
+                            {player.flagEmoji ?? "🏳️"} {player.nationality ?? "Unknown"} · {player.position}
+                          </small>
+                        </td>
+                        <td>{getPortraitFrameLabel(portrait.frame)}</td>
+                        <td>{getPortraitMoodLabel(portrait.mood)}</td>
+                        <td>
+                          <span
+                            className="club-color-dot"
+                            style={{ background: portrait.kitColor }}
+                          />
+                          <span
+                            className="club-color-dot"
+                            style={{ background: portrait.accentColor }}
+                          />
+                        </td>
+                        <td>{portrait.tags.join(" · ")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "players" && (
+        <section className="dashboard-grid identity-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">Player identity</span>
+            <h2>{playerIdentityOverview.countriesCount} tari in lot</h2>
+            <p className="muted">
+              Fiecare jucator are nationalitate, steag, picior preferat,
+              personalitate, rol de joc si marketability. Datele sunt generate
+              determinist si salvate in payload per user.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Jucatori romani</span>
+                <strong>{playerIdentityOverview.domesticPlayers}</strong>
+              </div>
+              <div className="metric">
+                <span>Straini</span>
+                <strong>{playerIdentityOverview.foreignPlayers}</strong>
+              </div>
+              <div className="metric">
+                <span>Marketability medie</span>
+                <strong>{playerIdentityOverview.averageMarketability}</strong>
+              </div>
+              <div className="metric">
+                <span>Leaderi</span>
+                <strong>{playerIdentityOverview.leadersCount}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Nationalitati</h3>
+            <div className="mini-list">
+              {playerIdentityOverview.topCountries.map((country) => (
+                <div className="mini-row" key={country.code}>
+                  <span>
+                    {country.flag} {country.name}
+                  </span>
+                  <strong>{country.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Picior preferat</h3>
+            <div className="mini-list">
+              <div className="mini-row">
+                <span>Left foot</span>
+                <strong>{playerIdentityOverview.leftFootedPlayers}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Both feet</span>
+                <strong>{playerIdentityOverview.bothFootedPlayers}</strong>
+              </div>
+              <div className="mini-row">
+                <span>Right foot</span>
+                <strong>
+                  {playerIdentityOverview.totalPlayers -
+                    playerIdentityOverview.leftFootedPlayers -
+                    playerIdentityOverview.bothFootedPlayers}
+                </strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Top player profiles</h3>
+                <p className="muted">
+                  Jucatorii cu cel mai bun mix de OVR, forma, moral si
+                  marketability.
+                </p>
+              </div>
+              <span className="status-pill ok">
+                {playerIdentityOverview.totalPlayers} profiles
+              </span>
+            </div>
+            <div className="profile-card-grid">
+              {playerIdentityOverview.spotlights.map((profile) => (
+                <div className="profile-card" key={profile.playerId}>
+                  <img
+                    className="portrait-thumb"
+                    src={
+                      buildPlayerPortrait(
+                        userTeam.players.find((player) => player.id === profile.playerId) ?? userTeam.players[0],
+                        {
+                          primaryColor: game.clubProfile.primaryColor,
+                          secondaryColor: game.clubProfile.secondaryColor,
+                        },
+                      ).dataUri
+                    }
+                    alt={`Pixel portrait ${profile.name}`}
+                  />
+                  <div>
+                    <strong>{profile.name}</strong>
+                    <span>
+                      {profile.position} · {profile.age} ani · {profile.nationality}
+                    </span>
+                    <small>{profile.summary}</small>
+                  </div>
+                  <b>{profile.marketability}</b>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Squad identity table</h3>
+                <p className="muted">
+                  Profil complet pentru fiecare jucator din lotul mare.
+                </p>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Avatar</th>
+                    <th>Jucator</th>
+                    <th>Nat</th>
+                    <th>Pos</th>
+                    <th>Age</th>
+                    <th>OVR</th>
+                    <th>Role</th>
+                    <th>Foot</th>
+                    <th>Personality</th>
+                    <th>Marketability</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userTeam.players.map((player) => (
+                    <tr key={player.id}>
+                      <td>
+                        <img
+                          className="portrait-table-thumb"
+                          src={
+                            buildPlayerPortrait(player, {
+                              primaryColor: game.clubProfile.primaryColor,
+                              secondaryColor: game.clubProfile.secondaryColor,
+                            }).dataUri
+                          }
+                          alt={`Pixel portrait ${player.name}`}
+                        />
+                      </td>
+                      <td>
+                        <strong>{player.name}</strong>
+                        <br />
+                        <small className="muted">
+                          {buildPlayerIdentitySummary(player)}
+                        </small>
+                      </td>
+                      <td>
+                        {player.flagEmoji ?? "🏳️"} {player.countryCode ?? "-"}
+                      </td>
+                      <td>
+                        <strong>{player.position}</strong>
+                      </td>
+                      <td>{player.age}</td>
+                      <td>
+                        <strong>{player.overall}</strong>
+                      </td>
+                      <td>{getRoleLabel(player.role)}</td>
+                      <td>{getPreferredFootLabel(player.preferredFoot)}</td>
+                      <td>{getPersonalityLabel(player.personality)}</td>
+                      <td>
+                        <strong>{player.marketability ?? 50}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "staff" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v2.8 Staff & Coaching Team</p>
+              <h2>Staff</h2>
+              <p className="muted">Staff-ul influenteaza training-ul, scouting-ul, academia si costurile pe runda.</p>
+            </div>
+            <button className="secondary-button compact" onClick={handleRefreshStaffCandidates}>
+              Refresh shortlist
+            </button>
+          </div>
+
+          <div className="metric-grid">
+            <div className="metric"><span>Average rating</span><strong>{staffImpact.averageRating}</strong></div>
+            <div className="metric"><span>Staff wage/runda</span><strong>{formatMoney(staffWageCost)}</strong></div>
+            <div className="metric"><span>Training bonus</span><strong>+{staffImpact.trainingBonus}</strong></div>
+            <div className="metric"><span>Scouting discount</span><strong>{staffImpact.scoutingDiscountPercent}%</strong></div>
+            <div className="metric"><span>Youth bonus</span><strong>+{staffImpact.youthBonus}</strong></div>
+            <div className="metric"><span>Recovery bonus</span><strong>+{staffImpact.recoveryBonus}</strong></div>
+          </div>
+
+          <div className="two-column">
+            <article className="panel soft-panel">
+              <h3>Current staff</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Role</th><th>Name</th><th>Rating</th><th>Specialty</th><th>Wage</th></tr></thead>
+                  <tbody>
+                    {game.staff.members.map((member) => (
+                      <tr key={member.id}>
+                        <td>{getStaffRoleLabel(member.role)}</td>
+                        <td>{member.name}</td>
+                        <td>{member.rating}</td>
+                        <td>{member.specialty}</td>
+                        <td>{formatMoney(member.wage)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className="panel soft-panel">
+              <h3>Candidates</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Role</th><th>Name</th><th>Rating</th><th>Wage</th><th></th></tr></thead>
+                  <tbody>
+                    {game.staff.candidates.map((candidate) => (
+                      <tr key={candidate.id}>
+                        <td>{getStaffRoleLabel(candidate.role)}</td>
+                        <td>{candidate.name}</td>
+                        <td>{candidate.rating}</td>
+                        <td>{formatMoney(candidate.wage)}</td>
+                        <td>
+                          <button className="secondary-button compact" onClick={() => handleHireStaff(candidate.id)}>
+                            Hire
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+
+          <article className="panel soft-panel">
+            <h3>Staff history</h3>
+            <ul className="clean-list">
+              {game.staff.history.slice(0, 8).map((record) => (
+                <li key={record.id}>{record.summary}</li>
+              ))}
+            </ul>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "records" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v2.9 Player Stats, Records & Awards</p>
+              <h2>Records & Awards</h2>
+              <p className="muted">Statistici de sezon, recorduri de club si awards calculate din meciurile simulate.</p>
+            </div>
+          </div>
+          <div className="metric-grid">
+            {playerStatsAwards.records.map((record) => (
+              <div className="metric" key={record.label}>
+                <span>{record.label}</span>
+                <strong>{record.value}</strong>
+                <small>{record.detail}</small>
+              </div>
+            ))}
+          </div>
+          <div className="card-grid">
+            {playerStatsAwards.awards.map((award) => (
+              <article className="mini-card" key={award.title}>
+                <span>{award.title}</span>
+                <strong>{award.playerName}</strong>
+                <p className="muted small-note">{award.reason}</p>
+              </article>
+            ))}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Player</th><th>Pos</th><th>Age</th><th>Apps</th><th>Goals</th><th>Rating</th><th>Value</th></tr></thead>
+              <tbody>
+                {playerStatsAwards.stats.map((stat) => (
+                  <tr key={stat.playerId}>
+                    <td>{stat.playerName}</td>
+                    <td>{stat.position}</td>
+                    <td>{stat.age}</td>
+                    <td>{stat.appearances}</td>
+                    <td>{stat.goals}</td>
+                    <td>{stat.averageRating}</td>
+                    <td>{formatMoney(stat.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+
+
+      {activeTab === "trophy" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v4.8 Career Mode Polish / Trophy Room</p>
+              <h2>Trophy Room & Career Legacy</h2>
+              <p className="muted">
+                Palmares, recorduri all-time, timeline de cariera, Hall of Fame si obiective legacy calculate din sezoane, cupa, Europa si statisticile jucatorilor.
+              </p>
+            </div>
+            <span className="status-pill ok">Legacy score {careerTrophyRoom.careerScore}/100</span>
+          </div>
+
+          <div className="metric-grid">
+            <div className="metric">
+              <span>Trofee totale</span>
+              <strong>{careerTrophyRoom.trophyCount}</strong>
+              <small>{careerTrophyRoom.completedSeasons} sezoane inchise</small>
+            </div>
+            {careerTrophyRoom.records.map((record) => (
+              <div className="metric" key={record.label}>
+                <span>{record.label}</span>
+                <strong>{record.value}</strong>
+                <small>{record.detail}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="card-grid">
+            {careerTrophyRoom.trophies.map((trophy) => (
+              <article className="mini-card" key={trophy.id}>
+                <span>{trophy.title}</span>
+                <strong>{trophy.count}</strong>
+                <p className="muted small-note">
+                  {trophy.detail}{trophy.lastSeason ? ` Ultima data: sezon ${trophy.lastSeason}.` : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+
+          <div className="dashboard-grid two-column">
+            <article className="panel soft-panel">
+              <h3>Career timeline</h3>
+              <ul className="clean-list">
+                {careerTrophyRoom.timeline.map((item) => (
+                  <li key={item.id}>
+                    <strong>S{item.seasonNumber} · {item.title}</strong>
+                    <p className="muted small-note">{item.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </article>
+
+            <article className="panel soft-panel">
+              <h3>Legacy milestones</h3>
+              <div className="academy-history">
+                {careerTrophyRoom.milestones.map((milestone) => (
+                  <div className="academy-record" key={milestone.id}>
+                    <span className={milestone.status === "achieved" ? "status-badge ok" : milestone.status === "active" ? "status-badge warning" : "status-badge"}>
+                      {milestone.status}
+                    </span>
+                    <div>
+                      <strong>{milestone.title}</strong>
+                      <small>{milestone.progressLabel}</small>
+                      <small>{milestone.detail}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+
+          <article className="panel soft-panel">
+            <h3>Hall of Fame watchlist</h3>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Player</th><th>Legacy tag</th><th>Score</th><th>Detail</th></tr></thead>
+                <tbody>
+                  {careerTrophyRoom.hallOfFame.map((player) => (
+                    <tr key={player.playerId}>
+                      <td>{player.playerName}</td>
+                      <td>{player.tag}</td>
+                      <td>{player.score}</td>
+                      <td>{player.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted small-note">{careerTrophyRoom.summary}</p>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "media" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v3.1 Media / Press Conferences</p>
+              <h2>Media Center</h2>
+              <p className="muted">Presa reactioneaza la rezultate si raspunsurile tale modifica reputatia media.</p>
+            </div>
+          </div>
+          <div className="metric-grid">
+            <div className="metric"><span>Media reputation</span><strong>{game.media.reputation}</strong></div>
+            <div className="metric"><span>Media pressure</span><strong>{mediaReport.pressure}</strong></div>
+            <div className="metric"><span>Tone</span><strong>{mediaReport.tone}</strong></div>
+            <div className="metric"><span>Last answer</span><strong>{game.media.lastAnswer ?? "-"}</strong></div>
+          </div>
+          <article className="panel soft-panel">
+            <h3>{mediaReport.topHeadline}</h3>
+            <p className="muted">{mediaReport.summary}</p>
+            <div className="button-row">
+              <button className="secondary-button compact" onClick={() => handlePressAnswer("calm")}>Calm answer</button>
+              <button className="secondary-button compact" onClick={() => handlePressAnswer("ambitious")}>Ambitious answer</button>
+              <button className="secondary-button compact" onClick={() => handlePressAnswer("defensive")}>Defensive answer</button>
+            </div>
+          </article>
+          <div className="stack">
+            {game.media.messages.slice(0, 10).map((message) => (
+              <article className={`inbox-card ${message.tone}`} key={message.id}>
+                <strong>{message.headline}</strong>
+                <p>{message.body}</p>
+                <span className="muted small-note">Pressure {message.pressure}/100 · S{message.seasonNumber} R{message.round}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === "fans" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v3.2 Stadium Attendance & Fan Happiness</p>
+              <h2>Fans</h2>
+              <p className="muted">Fanii reactioneaza la rezultate, pozitia in clasament si nivelul de fan experience al stadionului.</p>
+            </div>
+          </div>
+          <div className="metric-grid">
+            <div className="metric"><span>Fan happiness</span><strong>{fanReport.happiness}</strong></div>
+            <div className="metric"><span>Mood</span><strong>{fanReport.mood}</strong></div>
+            <div className="metric"><span>Attendance</span><strong>{fanReport.projectedAttendance.toLocaleString("en-US")}</strong></div>
+            <div className="metric"><span>Sellout chance</span><strong>{fanReport.selloutChance}%</strong></div>
+          </div>
+          <article className="panel soft-panel"><p>{fanReport.summary}</p></article>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Round</th><th>Happiness</th><th>Attendance</th><th>Summary</th></tr></thead>
+              <tbody>
+                {game.fans.history.slice(0, 12).map((record) => (
+                  <tr key={record.id}>
+                    <td>S{record.seasonNumber} R{record.round}</td>
+                    <td>{record.happiness}</td>
+                    <td>{record.projectedAttendance.toLocaleString("en-US")}</td>
+                    <td>{record.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "difficulty" && (
+        <section className="panel stack">
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">v3.3 Difficulty Levels & Game Balance</p>
+              <h2>Difficulty & Balance</h2>
+              <p className="muted">Seteaza dificultatea si vezi rapid daca economia, lotul si presiunea de board sunt echilibrate.</p>
+            </div>
+          </div>
+          <div className="metric-grid">
+            <div className="metric"><span>Difficulty</span><strong>{balanceReport.difficultyLabel}</strong></div>
+            <div className="metric"><span>Balance score</span><strong>{balanceReport.score}</strong></div>
+            <div className="metric"><span>Economy</span><strong>{balanceReport.economyStatus}</strong></div>
+            <div className="metric"><span>Squad</span><strong>{balanceReport.squadStatus}</strong></div>
+            <div className="metric"><span>Pressure</span><strong>{balanceReport.pressureStatus}</strong></div>
+          </div>
+          <div className="card-grid">
+            {getDifficultyOptions().map((option) => (
+              <article className="mini-card" key={option.level}>
+                <span>{option.label}</span>
+                <strong>{Math.round(option.incomeModifier * 100)}% income</strong>
+                <p className="muted small-note">{option.description}</p>
+                <button className="secondary-button compact" onClick={() => handleSetDifficulty(option.level)}>
+                  Select
+                </button>
+              </article>
+            ))}
+          </div>
+          <article className="panel soft-panel">
+            <h3>Balance notes</h3>
+            <ul className="clean-list">
+              {balanceReport.notes.map((note) => <li key={note}>{note}</li>)}
+            </ul>
+          </article>
         </section>
       )}
 
@@ -4090,7 +7826,7 @@ export default function App() {
               </div>
               <div className="metric">
                 <span>Upkeep/runda</span>
-                <strong>{formatMoney(academyRoundCost)}</strong>
+                <strong>{formatMoney(effectiveAcademyRoundCost)}</strong>
               </div>
               <div className="metric">
                 <span>Scouting</span>
@@ -4681,6 +8417,221 @@ export default function App() {
         </section>
       )}
 
+      {activeTab === "europe" && (
+        <section className="dashboard-grid cup-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">European Competition</span>
+            <h2>
+              {game.europeanState.status === "completed"
+                ? `Castigatoare: ${game.europeanState.championTeamName}`
+                : getEuropeanRoundLabel(currentEuropeanRoundName)}
+            </h2>
+            <p className="muted">
+              Competitia europeana este separata de liga si cupa interna. Include
+              adversari continentali generati determinist, premii mai mari si
+              impact pe fitness, moral, accidentari, finance, board si inbox.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Status</span>
+                <strong>
+                  {game.europeanState.status === "completed"
+                    ? "Finalizata"
+                    : "Activa"}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Runda curenta</span>
+                <strong>
+                  {game.europeanState.status === "completed"
+                    ? "-"
+                    : getEuropeanRoundLabel(currentEuropeanRoundName)}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Clubul tau</span>
+                <strong>{userStillInEurope ? "In Europa" : "Eliminat"}</strong>
+              </div>
+              <div className="metric">
+                <span>Meciul tau</span>
+                <strong>
+                  {userEuropeanMatch
+                    ? `${userEuropeanMatch.homeTeamName} vs ${userEuropeanMatch.awayTeamName}`
+                    : "-"}
+                </strong>
+              </div>
+              <div className="metric">
+                <span>Istoric Europa</span>
+                <strong>{game.europeanHistory.length}</strong>
+              </div>
+              <div className="metric">
+                <span>Cash club</span>
+                <strong>{formatMoney(game.finance.cashBalance)}</strong>
+              </div>
+            </div>
+            <div className="save-actions cup-actions">
+              <button
+                type="button"
+                onClick={simulateNextEuropeanRound}
+                disabled={game.europeanState.status === "completed"}
+              >
+                Simuleaza runda europeana
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Ultima runda europeana</h3>
+            {latestEuropeanRecord ? (
+              <>
+                <div className="stat-row">
+                  <span>Runda</span>
+                  <strong>{getEuropeanRoundLabel(latestEuropeanRecord.roundName)}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Club implicat</span>
+                  <strong>
+                    {latestEuropeanRecord.userParticipated ? "Da" : "Nu"}
+                  </strong>
+                </div>
+                <div className="stat-row">
+                  <span>Calificare</span>
+                  <strong>{latestEuropeanRecord.userAdvanced ? "Da" : "Nu"}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Bonus</span>
+                  <strong>{formatMoney(latestEuropeanRecord.prizeMoney)}</strong>
+                </div>
+                <p className="muted small-note">{latestEuropeanRecord.summary}</p>
+              </>
+            ) : (
+              <p className="muted">Nu ai simulat inca nicio runda europeana.</p>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Calendar european</h3>
+                <p className="muted">
+                  Runda curenta este simulata complet. Egalurile se decid
+                  determinist la penalty-uri, ca in cupa interna.
+                </p>
+              </div>
+              <span className="status-pill ok">
+                Sezon {game.europeanState.seasonNumber}
+              </span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Runda</th>
+                    <th>Meci</th>
+                    <th>Scor</th>
+                    <th>Castigatoare</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {game.europeanState.matches.map((match) => (
+                    <tr
+                      className={
+                        match.homeTeamId === USER_TEAM_ID ||
+                        match.awayTeamId === USER_TEAM_ID
+                          ? "player-alert-row"
+                          : undefined
+                      }
+                      key={match.id}
+                    >
+                      <td>{getEuropeanRoundLabel(match.roundName)}</td>
+                      <td>
+                        {match.homeTeamName} vs {match.awayTeamName}
+                      </td>
+                      <td>
+                        {match.result
+                          ? `${match.result.homeScore} - ${match.result.awayScore}${match.decidedByPenalties ? " p" : ""}`
+                          : "-"}
+                      </td>
+                      <td>
+                        <strong>{match.winnerTeamName ?? "-"}</strong>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            match.played ? "status-badge ok" : "status-badge"
+                          }
+                        >
+                          {match.played ? "Jucat" : "Programat"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Istoric european</h3>
+                <p className="muted">
+                  Rezultatele europene sunt salvate in payload per user si intra
+                  in rapoartele de stabilitate/debug.
+                </p>
+              </div>
+              <span className="status-pill">
+                {game.europeanHistory.length} runde
+              </span>
+            </div>
+            {game.europeanHistory.length === 0 ? (
+              <p className="muted">Istoricul european este gol.</p>
+            ) : (
+              <div className="contract-history">
+                {game.europeanHistory.map((record) => (
+                  <div className="contract-record" key={record.id}>
+                    <span
+                      className={
+                        record.userAdvanced
+                          ? "status-badge ok"
+                          : record.userParticipated
+                            ? "status-badge warning"
+                            : "status-badge"
+                      }
+                    >
+                      {getEuropeanRoundLabel(record.roundName)}
+                    </span>
+                    <div>
+                      <strong>{record.championTeamName ?? record.summary}</strong>
+                      <small>{record.summary}</small>
+                    </div>
+                    <strong>{formatMoney(record.prizeMoney)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      )}
+
+
       {activeTab === "contracts" && (
         <section className="dashboard-grid contracts-grid">
           <article className="panel highlight-panel">
@@ -4706,6 +8657,10 @@ export default function App() {
               <div className="metric">
                 <span>Wage bill/runda</span>
                 <strong>{formatMoney(wageBill)}</strong>
+              </div>
+              <div className="metric">
+                <span>Staff cost/runda</span>
+                <strong>{formatMoney(staffWageCost)}</strong>
               </div>
               <div className="metric">
                 <span>Wage budget</span>
@@ -4929,6 +8884,366 @@ export default function App() {
         </section>
       )}
 
+      {activeTab === "sponsorships" && (
+        <section className="dashboard-grid finance-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">Commercial department</span>
+            <h2>{sponsorshipHealth.summary}</h2>
+            <p className="muted">
+              Sponsorizările adaugă venit recurent la raportul financiar al
+              fiecărei etape. Unele deal-uri oferă bonus de semnare, bonus de
+              victorie și bonus de obiectiv dacă echipa rămâne sus în clasament.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Deal-uri active</span>
+                <strong>{sponsorshipHealth.activeDealsCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Oferte disponibile</span>
+                <strong>{sponsorshipHealth.offersCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Venit/runda</span>
+                <strong>{formatMoney(sponsorshipHealth.projectedRoundIncome)}</strong>
+              </div>
+              <div className="metric">
+                <span>Bonus victorie max</span>
+                <strong>{formatMoney(sponsorshipHealth.maxPotentialWinBonus)}</strong>
+              </div>
+            </div>
+            <div className="save-actions transfer-actions">
+              <button
+                type="button"
+                onClick={handleRefreshSponsorshipOffers}
+                disabled={!sponsorshipCanRefresh}
+              >
+                Refresh oferte
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveLocal}
+              >
+                Salveaza local
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSaveSupabase}
+              >
+                Salveaza Supabase
+              </button>
+            </div>
+            {!sponsorshipCanRefresh && (
+              <p className="muted small-note">
+                Ai actualizat deja ofertele în runda curentă. Simulează o etapă
+                pentru un nou refresh.
+              </p>
+            )}
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Ultimul eveniment comercial</h3>
+            {latestSponsorshipRecord ? (
+              <>
+                <div className="stat-row">
+                  <span>Tip</span>
+                  <strong>{latestSponsorshipRecord.type}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Sponsor</span>
+                  <strong>{latestSponsorshipRecord.sponsorName ?? "-"}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Valoare</span>
+                  <strong>{formatMoney(latestSponsorshipRecord.amount)}</strong>
+                </div>
+                <p className="muted">{latestSponsorshipRecord.summary}</p>
+              </>
+            ) : (
+              <p className="muted">
+                Nu există încă evenimente comerciale. Semnează primul sponsor.
+              </p>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Oferte de sponsorizare</h3>
+                <p className="muted">
+                  Poți avea câte un deal activ pe fiecare categorie comercială.
+                  Board confidence-ul influențează ofertele disponibile.
+                </p>
+              </div>
+              <span className="status-pill ok">
+                {game.sponsorships.availableOffers.length} oferte
+              </span>
+            </div>
+            {game.sponsorships.availableOffers.length === 0 ? (
+              <p className="muted">
+                Nu ai oferte disponibile momentan. Reîmprospătează ofertele în
+                runda următoare sau îmbunătățește job security-ul.
+              </p>
+            ) : (
+              <div className="transfer-market-list">
+                {game.sponsorships.availableOffers.map((offer) => (
+                  <div className="transfer-card" key={offer.id}>
+                    <div>
+                      <strong>{offer.sponsorName}</strong>
+                      <small>
+                        {getSponsorshipCategoryLabel(offer.category)} · expiră
+                        după sezonul {offer.expiresSeason}
+                      </small>
+                      <small>{offer.summary}</small>
+                    </div>
+                    <div className="transfer-values">
+                      <span>{formatMoney(offer.baseIncomePerRound)}/runda</span>
+                      <span>Sign {formatMoney(offer.signingBonus)}</span>
+                      <span>Win {formatMoney(offer.winBonus)}</span>
+                      <span>Min board {offer.minBoardConfidence}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSignSponsorshipDeal(offer.id)}
+                      disabled={game.boardState.jobSecurity < offer.minBoardConfidence}
+                    >
+                      Semneaza
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Deal-uri active</h3>
+                <p className="muted">
+                  Venitul de bază se aplică la fiecare rundă de campionat.
+                  Bonusurile se adaugă automat în Finance.
+                </p>
+              </div>
+              <span className="status-pill">
+                {game.sponsorships.activeDeals.length} active
+              </span>
+            </div>
+            {game.sponsorships.activeDeals.length === 0 ? (
+              <p className="muted">Nu ai încă sponsori activi.</p>
+            ) : (
+              <div className="mini-list">
+                {game.sponsorships.activeDeals.map((deal) => (
+                  <div className="mini-row" key={deal.id}>
+                    <span>
+                      {deal.sponsorName} · {getSponsorshipCategoryLabel(deal.category)}
+                    </span>
+                    <strong>
+                      {formatMoney(deal.baseIncomePerRound)}/runda · până în S{deal.expiresSeason}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Istoric sponsorizări</h3>
+                <p className="muted">
+                  Ultimele 24 evenimente comerciale sunt salvate în payload per
+                  user.
+                </p>
+              </div>
+              <span className="status-pill">
+                {game.sponsorshipHistory.length} evenimente
+              </span>
+            </div>
+            {game.sponsorshipHistory.length === 0 ? (
+              <p className="muted">Istoricul comercial este gol.</p>
+            ) : (
+              <div className="finance-history">
+                {game.sponsorshipHistory.map((record) => (
+                  <div className="finance-record" key={record.id}>
+                    <span className={record.amount > 0 ? "status-badge ok" : "status-badge"}>
+                      {record.type}
+                    </span>
+                    <div>
+                      <strong>{record.sponsorName ?? "Commercial update"}</strong>
+                      <small>{record.summary}</small>
+                    </div>
+                    <strong>{formatMoney(record.amount)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      )}
+
+      {activeTab === "facilities" && (
+        <section className="dashboard-grid finance-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">Stadium & Facilities</span>
+            <h2>{game.facilities.stadiumName}</h2>
+            <p className="muted">
+              Dezvoltă stadionul și infrastructura clubului. Facilitățile adaugă
+              venituri la meciurile acasă, venit comercial pe rundă, bonus la
+              training și discount pentru costurile academiei.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Capacitate</span>
+                <strong>{game.facilities.capacity.toLocaleString("en-US")}</strong>
+              </div>
+              <div className="metric">
+                <span>Tier stadion</span>
+                <strong>{facilitiesOverview.stadiumTier}</strong>
+              </div>
+              <div className="metric">
+                <span>Attendance proiectat</span>
+                <strong>{facilitiesOverview.projectedAttendance.toLocaleString("en-US")}</strong>
+              </div>
+              <div className="metric">
+                <span>Home boost</span>
+                <strong>{formatMoney(facilitiesOverview.projectedHomeIncomeBoost)}</strong>
+              </div>
+              <div className="metric">
+                <span>Commercial/runda</span>
+                <strong>{formatMoney(facilitiesOverview.projectedCommercialIncome)}</strong>
+              </div>
+              <div className="metric">
+                <span>Maintenance/runda</span>
+                <strong>{formatMoney(facilitiesOverview.maintenanceCost)}</strong>
+              </div>
+            </div>
+            <p className="success-message inline-message">
+              {facilitiesOverview.summary}
+            </p>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Impact sportiv</h3>
+            <div className="stat-row">
+              <span>Training bonus</span>
+              <strong>+{facilitiesOverview.trainingBonus}%</strong>
+            </div>
+            <div className="stat-row">
+              <span>Academy discount</span>
+              <strong>{facilitiesOverview.academyCostDiscountPercent}%</strong>
+            </div>
+            <div className="stat-row">
+              <span>Medical reduction</span>
+              <strong>{facilitiesOverview.injuryRiskReduction}%</strong>
+            </div>
+            <div className="stat-row">
+              <span>Fan satisfaction</span>
+              <strong>{facilitiesOverview.fanSatisfaction}/100</strong>
+            </div>
+            <p className="muted small-note">
+              Training ground-ul influențează șansa de îmbunătățire la antrenament.
+              Academy campus reduce upkeep-ul academiei în Finance.
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Ultimul eveniment facilities</h3>
+            {latestFacilityRecord ? (
+              <>
+                <div className="stat-row">
+                  <span>Tip</span>
+                  <strong>{latestFacilityRecord.type}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Valoare</span>
+                  <strong>{formatMoney(latestFacilityRecord.amount)}</strong>
+                </div>
+                <p className="muted">{latestFacilityRecord.summary}</p>
+              </>
+            ) : (
+              <p className="muted">
+                Nu există încă evenimente. Fă primul upgrade sau simulează o etapă.
+              </p>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Upgrade facilities</h3>
+                <p className="muted">
+                  Upgrade-urile se plătesc din cash balance și sunt salvate în
+                  payload per user.
+                </p>
+              </div>
+              <span className="status-pill ok">
+                Cash {formatMoney(game.finance.cashBalance)}
+              </span>
+            </div>
+            <div className="transfer-market-list">
+              {facilityUpgradeOptions.map((option) => (
+                <div className="transfer-card" key={option.type}>
+                  <div>
+                    <strong>{option.label}</strong>
+                    <small>
+                      {option.currentLevelLabel} → {option.nextLevelLabel}
+                    </small>
+                    <small>{option.effect}</small>
+                  </div>
+                  <div className="transfer-values">
+                    <span>Cost {option.maxed ? "Max" : formatMoney(option.cost)}</span>
+                    <span>{getFacilityLabel(option.type)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUpgradeFacility(option.type)}
+                    disabled={option.maxed || game.finance.cashBalance < option.cost}
+                  >
+                    {option.maxed ? "Max" : "Upgrade"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Istoric facilities</h3>
+                <p className="muted">
+                  Ultimele 24 evenimente de infrastructură sunt salvate în payload.
+                </p>
+              </div>
+              <span className="status-pill">{game.facilityHistory.length} evenimente</span>
+            </div>
+            {game.facilityHistory.length === 0 ? (
+              <p className="muted">Istoricul de facilities este gol.</p>
+            ) : (
+              <div className="finance-history">
+                {game.facilityHistory.map((record) => (
+                  <div className="finance-record" key={record.id}>
+                    <span className={record.type === "upgrade" ? "status-badge ok" : "status-badge"}>
+                      {record.type}
+                    </span>
+                    <div>
+                      <strong>{record.upgradeType ? getFacilityLabel(record.upgradeType) : "Facilities"}</strong>
+                      <small>{record.summary}</small>
+                    </div>
+                    <strong>{formatMoney(record.amount)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      )}
+
       {activeTab === "finance" && (
         <section className="dashboard-grid finance-grid">
           <article className="panel highlight-panel">
@@ -4958,7 +9273,7 @@ export default function App() {
               </div>
               <div className="metric">
                 <span>Academy upkeep</span>
-                <strong>{formatMoney(academyRoundCost)}</strong>
+                <strong>{formatMoney(effectiveAcademyRoundCost)}</strong>
               </div>
             </div>
             <p
@@ -5011,9 +9326,33 @@ export default function App() {
                   </strong>
                 </div>
                 <div className="stat-row">
+                  <span>Sponsori</span>
+                  <strong>
+                    +{formatMoney(latestFinanceReport.commercialIncome ?? 0)}
+                  </strong>
+                </div>
+                <div className="stat-row">
+                  <span>Facilities income</span>
+                  <strong>
+                    +{formatMoney(latestFinanceReport.facilitiesIncome ?? 0)}
+                  </strong>
+                </div>
+                <div className="stat-row">
+                  <span>Facilities maintenance</span>
+                  <strong>
+                    -{formatMoney(latestFinanceReport.facilitiesMaintenance ?? 0)}
+                  </strong>
+                </div>
+                <div className="stat-row">
                   <span>Academie</span>
                   <strong>
                     -{formatMoney(latestFinanceReport.academyCost ?? 0)}
+                  </strong>
+                </div>
+                <div className="stat-row">
+                  <span>Staff</span>
+                  <strong>
+                    -{formatMoney(latestFinanceReport.staffCost ?? 0)}
                   </strong>
                 </div>
                 <div className="stat-row">
@@ -5064,9 +9403,11 @@ export default function App() {
                       <small>
                         Sponsor {formatMoney(report.sponsorIncome)} · Matchday{" "}
                         {formatMoney(report.matchdayIncome)} · Bonus{" "}
-                        {formatMoney(report.performanceBonus)} · Salarii{" "}
-                        {formatMoney(report.wageCost)} · Academie{" "}
-                        {formatMoney(report.academyCost ?? 0)}
+                        {formatMoney(report.performanceBonus)} · Sponsori {" "}
+                        {formatMoney(report.commercialIncome ?? 0)} · Facilities {" "}
+                        {formatMoney(report.facilitiesIncome ?? 0)} / -{formatMoney(report.facilitiesMaintenance ?? 0)} · Salarii {" "}
+                        {formatMoney(report.wageCost)} · Academie {" "}
+                        {formatMoney(report.academyCost ?? 0)} · Staff {formatMoney(report.staffCost ?? 0)}
                       </small>
                     </div>
                     <strong>{formatMoney(report.balanceAfter)}</strong>
@@ -5175,6 +9516,159 @@ export default function App() {
               Exemplu: 4-3-3 + attacking creste atacul, dar scade apararea.
               5-3-2 + defensive scade riscul, dar produce mai putine ocazii.
             </p>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "advancedTactics" && (
+        <section className="dashboard-grid">
+          <article className="panel highlight-panel">
+            <span className="team-label">Advanced tactics</span>
+            <h2>{advancedTacticsReport.summary}</h2>
+            <p className="muted">
+              Ajusteaza detaliile tactice fara sa pierzi compatibilitatea cu
+              sistemul vechi de formation / mentality / pressing. Valorile noi
+              sunt optionale si salvate in acelasi payload per user.
+            </p>
+            <div className="metric-grid">
+              <div className="metric">
+                <span>Tactical score</span>
+                <strong>{advancedTacticsReport.tacticalScore}/100</strong>
+              </div>
+              <div className="metric">
+                <span>Risk</span>
+                <strong>{advancedTacticsReport.risk.label}</strong>
+              </div>
+              <div className="metric">
+                <span>Risk score</span>
+                <strong>{advancedTacticsReport.risk.score}/100</strong>
+              </div>
+              <div className="metric">
+                <span>Style</span>
+                <strong>{advancedTactic.tempo} / {advancedTactic.width}</strong>
+              </div>
+            </div>
+            {advancedTacticsReport.risk.warnings.length > 0 && (
+              <div className="callout warning-callout">
+                {advancedTacticsReport.risk.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel">
+            <h3>Advanced controls</h3>
+            <div className="tactic-form">
+              <label>
+                Tempo
+                <select
+                  value={advancedTactic.tempo}
+                  onChange={(event) =>
+                    updateTactic("tempo", event.target.value as Tactic["tempo"])
+                  }
+                >
+                  {advancedTacticOptions.tempo.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Width
+                <select
+                  value={advancedTactic.width}
+                  onChange={(event) =>
+                    updateTactic("width", event.target.value as Tactic["width"])
+                  }
+                >
+                  {advancedTacticOptions.width.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Risk
+                <select
+                  value={advancedTactic.risk}
+                  onChange={(event) =>
+                    updateTactic("risk", event.target.value as Tactic["risk"])
+                  }
+                >
+                  {advancedTacticOptions.risk.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Defensive line
+                <select
+                  value={advancedTactic.defensiveLine}
+                  onChange={(event) =>
+                    updateTactic("defensiveLine", event.target.value as Tactic["defensiveLine"])
+                  }
+                >
+                  {advancedTacticOptions.defensiveLine.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Attacking focus
+                <select
+                  value={advancedTactic.attackingFocus}
+                  onChange={(event) =>
+                    updateTactic("attackingFocus", event.target.value as Tactic["attackingFocus"])
+                  }
+                >
+                  {advancedTacticOptions.attackingFocus.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Advanced strength</h3>
+            <div className="stat-row"><span>Attack</span><strong>{advancedTeamStrength.attack.toFixed(1)}</strong></div>
+            <div className="stat-row"><span>Midfield</span><strong>{advancedTeamStrength.midfield.toFixed(1)}</strong></div>
+            <div className="stat-row"><span>Defense</span><strong>{advancedTeamStrength.defense.toFixed(1)}</strong></div>
+            <div className="stat-row"><span>Goalkeeper</span><strong>{advancedTeamStrength.goalkeeper.toFixed(1)}</strong></div>
+            <div className="stat-row"><span>Overall</span><strong>{advancedTeamStrength.overall.toFixed(1)}</strong></div>
+            <p className="muted small-note">
+              Comparatie baza: {teamStrength.overall.toFixed(1)} overall.
+            </p>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Role suitability</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Player</th><th>Pos</th><th>Role</th><th>Fit</th><th>Note</th></tr>
+                </thead>
+                <tbody>
+                  {advancedTacticsReport.roles.map((role) => (
+                    <tr key={role.playerId}>
+                      <td>{role.playerName}</td>
+                      <td>{role.position}</td>
+                      <td>{role.role}</td>
+                      <td>{role.suitability}/100</td>
+                      <td>{role.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Recommendations</h3>
+            <div className="card-list">
+              {advancedTacticsReport.recommendations.map((item) => (
+                <div className="mini-card" key={item}>{item}</div>
+              ))}
+            </div>
           </article>
         </section>
       )}
@@ -5665,6 +10159,850 @@ export default function App() {
                 simulate round, reload cloud.
               </li>
             </ol>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "release" && (
+        <section className="dashboard-grid beta-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v4.0 Beta Polish Release</span>
+            <h2>{betaPolishRelease.statusLabel}</h2>
+            <p className="muted">
+              Panou final de release: combina Beta, Stability, Admin, Database,
+              Multiplayer si Advanced Tactics intr-un singur status de lansare.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric">
+                <span>Release score</span>
+                <strong>{betaPolishRelease.score}/100</strong>
+              </div>
+              <div className="metric">
+                <span>Passed</span>
+                <strong>{betaPolishRelease.passCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Warnings</span>
+                <strong>{betaPolishRelease.warningCount}</strong>
+              </div>
+              <div className="metric">
+                <span>Blockers</span>
+                <strong>{betaPolishRelease.failCount}</strong>
+              </div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Release score">
+              <i style={{ width: `${betaPolishRelease.score}%` }} />
+            </div>
+            <p className="muted small-note">
+              Tip release: <strong>{betaPolishRelease.releaseType}</strong>. Daca
+              apar blockers, rezolva-le din taburile indicate inainte de deploy.
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Release actions</h3>
+            <div className="button-stack beta-buttons">
+              <button onClick={handleDownloadReleaseSave}>Export save JSON</button>
+              <button className="secondary-button" onClick={handleCopyReleaseNotes}>
+                Copiaza release notes
+              </button>
+              <button className="secondary-button" onClick={() => setActiveTab("qa")}>
+                QA Live
+              </button>
+              <button className="secondary-button" onClick={() => setActiveTab("admin")}>
+                Admin debug
+              </button>
+            </div>
+            <p className="muted small-note">
+              Exportul save este portabil si nu include parola sau Supabase access token.
+              Pentru debug complet foloseste in continuare Admin &gt; Genereaza export debug.
+            </p>
+            {saveStatus && <p className="success-message">{saveStatus}</p>}
+            {errorMessage && <p className="error-message">{errorMessage}</p>}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Release milestones</h3>
+                <p className="muted">Indicatori scurti pentru handoff si deploy.</p>
+              </div>
+              <span className={`status-pill ${betaPolishRelease.failCount > 0 ? "danger" : betaPolishRelease.warningCount > 0 ? "warning" : "ok"}`}>
+                {betaPolishRelease.failCount > 0 ? "Blocked" : betaPolishRelease.warningCount > 0 ? "Candidate" : "Ready"}
+              </span>
+            </div>
+            <div className="metric-grid compact-metrics">
+              {betaPolishRelease.milestones.map((item) => (
+                <div className="metric" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                    {item.status}
+                  </small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Release checks</h3>
+                <p className="muted">
+                  Checklist v4 care leaga toate panourile de stabilitate si gameplay.
+                </p>
+              </div>
+              <span className="status-pill ok">schema {SAVE_SCHEMA_VERSION}</span>
+            </div>
+            <div className="beta-check-grid">
+              {betaPolishRelease.checks.map((item) => (
+                <article className={`beta-check-card ${item.status}`} key={item.id}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">{item.category}</span>
+                      <h4>{item.title}</h4>
+                    </div>
+                    <span className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="muted">{item.summary}</p>
+                  <small>{item.action}</small>
+                  <button
+                    type="button"
+                    className="secondary-button compact"
+                    onClick={() => setActiveTab(item.targetTab as Tab)}
+                  >
+                    Deschide
+                  </button>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>QA commands</h3>
+            <div className="beta-action-list">
+              {betaPolishRelease.qaCommands.map((command) => (
+                <div className="beta-action" key={command}>
+                  <span>$</span>
+                  <p><code>{command}</code></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Release notes</h3>
+            <div className="beta-action-list">
+              {betaPolishRelease.releaseNotes.map((note) => (
+                <div className="beta-action" key={note}>
+                  <span>→</span>
+                  <p>{note}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Launch checklist</h3>
+            <ol className="deploy-checklist">
+              {betaPolishRelease.launchChecklist.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "performance" && (
+        <section className="dashboard-grid beta-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v4.1 Performance</span>
+            <h2>{performanceDeploy.statusLabel}</h2>
+            <p className="muted">
+              Panou pentru deploy optimization: chunking Vite, Netlify profile,
+              ZIP hygiene si comenzi QA pentru build-uri rapide si predictibile.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>Performance score</span><strong>{performanceDeploy.score}/100</strong></div>
+              <div className="metric"><span>Passed</span><strong>{performanceDeploy.passCount}</strong></div>
+              <div className="metric"><span>Warnings</span><strong>{performanceDeploy.warningCount}</strong></div>
+              <div className="metric"><span>Blockers</span><strong>{performanceDeploy.failCount}</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Performance score">
+              <i style={{ width: `${performanceDeploy.score}%` }} />
+            </div>
+            <p className="muted small-note">
+              v4.1 nu adauga gameplay nou; optimizeaza build-ul dupa warning-ul
+              de bundle mare aparut in v4.0.
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Build commands</h3>
+            <div className="beta-action-list">
+              {performanceDeploy.recommendedCommands.map((command) => (
+                <div className="beta-action" key={command}>
+                  <span>$</span>
+                  <p><code>{command}</code></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Performance checks</h3>
+                <p className="muted">
+                  Verificari pentru chunking, Netlify, schema save si igiena arhivei.
+                </p>
+              </div>
+              <span className={`status-pill ${performanceDeploy.failCount > 0 ? "danger" : performanceDeploy.warningCount > 0 ? "warning" : "ok"}`}>
+                {performanceDeploy.failCount > 0 ? "Blocked" : performanceDeploy.warningCount > 0 ? "Warnings" : "Optimized"}
+              </span>
+            </div>
+            <div className="beta-check-grid">
+              {performanceDeploy.checks.map((item) => (
+                <article className={`beta-check-card ${item.status}`} key={item.id}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">deploy</span>
+                      <h4>{item.title}</h4>
+                    </div>
+                    <span className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="muted">{item.summary}</p>
+                  <small>{item.action}</small>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Chunk plan</h3>
+            <div className="beta-action-list">
+              {performanceDeploy.chunkPlan.map((chunk) => (
+                <div className="beta-action" key={chunk.name}>
+                  <span>JS</span>
+                  <p><strong>{chunk.name}</strong><br /><small>{chunk.purpose} · target &lt; {chunk.expectedMaxKb} KB</small></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Netlify profile</h3>
+            <div className="beta-action-list">
+              {performanceDeploy.netlifyBuildProfile.map((item) => (
+                <div className="beta-action" key={item}>
+                  <span>✓</span>
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Release notes v4.1</h3>
+            <div className="beta-action-list">
+              {performanceDeploy.releaseNotes.map((note) => (
+                <div className="beta-action" key={note}>
+                  <span>→</span>
+                  <p>{note}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "pwa" && (
+        <section className="dashboard-grid beta-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v4.2 PWA / Offline Install</span>
+            <h2>{pwaInstall.statusLabel}</h2>
+            <p className="muted">
+              Instalare pe telefon, manifest, service worker, offline fallback si
+              verificari pentru app-like mobile beta. Nu foloseste API extern si nu
+              adauga dependinte noi.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>PWA score</span><strong>{pwaInstall.score}/100</strong></div>
+              <div className="metric"><span>Passed</span><strong>{pwaInstall.passCount}</strong></div>
+              <div className="metric"><span>Warnings</span><strong>{pwaInstall.warningCount}</strong></div>
+              <div className="metric"><span>Blockers</span><strong>{pwaInstall.failCount}</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="PWA score">
+              <i style={{ width: `${pwaInstall.score}%` }} />
+            </div>
+            <p className="muted small-note">
+              Status instalare: <strong>{pwaInstall.installStatusLabel}</strong>.
+              Supabase cloud save necesita internet, dar app shell + local save
+              raman fallback-ul pentru testare mobila.
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Install status</h3>
+            <div className="debug-grid compact-debug">
+              <div className="debug-fact"><span>Service worker</span><strong>{pwaServiceWorkerStatus}</strong></div>
+              <div className="debug-fact"><span>Install prompt</span><strong>{pwaInstallPromptAvailable ? "available" : "not yet"}</strong></div>
+              <div className="debug-fact"><span>Standalone</span><strong>{pwaInstalled ? "yes" : "no"}</strong></div>
+              <div className="debug-fact"><span>Schema</span><strong>{SAVE_SCHEMA_VERSION}</strong></div>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>PWA checks</h3>
+                <p className="muted">
+                  Verificari pentru manifest, service worker, fallback offline,
+                  HTTPS si siguranta salvarii locale.
+                </p>
+              </div>
+              <span className={`status-pill ${pwaInstall.failCount > 0 ? "danger" : pwaInstall.warningCount > 0 ? "warning" : "ok"}`}>
+                {pwaInstall.failCount > 0 ? "Blocked" : pwaInstall.warningCount > 0 ? "Warnings" : "Install ready"}
+              </span>
+            </div>
+            <div className="beta-check-grid">
+              {pwaInstall.checks.map((item) => (
+                <article className={`beta-check-card ${item.status}`} key={item.id}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">pwa</span>
+                      <h4>{item.title}</h4>
+                    </div>
+                    <span className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="muted">{item.summary}</p>
+                  <small>{item.action}</small>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Install steps</h3>
+            <div className="beta-action-list">
+              {pwaInstall.installSteps.map((step, index) => (
+                <div className="beta-action" key={step}>
+                  <span>{index + 1}</span>
+                  <p>{step}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Offline assets</h3>
+            <div className="beta-action-list">
+              {pwaInstall.offlineAssets.map((asset) => (
+                <div className="beta-action" key={asset}>
+                  <span>cache</span>
+                  <p><code>{asset}</code></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>QA commands</h3>
+            <div className="beta-action-list">
+              {pwaInstall.qaCommands.map((command) => (
+                <div className="beta-action" key={command}>
+                  <span>$</span>
+                  <p><code>{command}</code></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Release notes v4.2</h3>
+            <div className="beta-action-list">
+              {pwaInstall.releaseNotes.map((note) => (
+                <div className="beta-action" key={note}>
+                  <span>→</span>
+                  <p>{note}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "notifications" && (
+        <section className="dashboard-grid beta-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v4.3 Notifications / Reminders</span>
+            <h2>{notificationCenter.statusLabel}</h2>
+            <p className="muted">
+              Notification Center adauga reminder-e locale pentru save, training,
+              matchday, fitness, contracte, board si Inbox. Browser notifications
+              sunt optionale; reminder-ele in-app functioneaza si fara permisiune.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>Notification score</span><strong>{notificationCenter.score}/100</strong></div>
+              <div className="metric"><span>Reminders</span><strong>{notificationCenter.unreadCount}</strong></div>
+              <div className="metric"><span>Urgente</span><strong>{notificationCenter.highPriorityCount}</strong></div>
+              <div className="metric"><span>Permission</span><strong>{notificationPermission}</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Notification score">
+              <i style={{ width: `${notificationCenter.score}%` }} />
+            </div>
+            <p className="muted small-note">
+              Urmatorul pas recomandat: <strong>{notificationCenter.nextBestAction}</strong>
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Browser permission</h3>
+            <p className="muted">{notificationCenter.permissionLabel}</p>
+            <div className="button-row stacked-buttons">
+              <button className="primary-button" type="button" onClick={handleRequestNotificationPermission}>
+                Request permission
+              </button>
+              <button className="secondary-button" type="button" onClick={handleSendTestNotification}>
+                Send test notification
+              </button>
+            </div>
+            <p className="muted small-note">
+              Pe iOS, notificarile sunt mai stabile dupa ce app-ul este instalat din Add to Home Screen.
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>Reminder settings</h3>
+            <div className="settings-list">
+              {([
+                ["enabled", "In-app reminders"],
+                ["saveReminders", "Save reminders"],
+                ["trainingReminders", "Training reminders"],
+                ["matchdayReminders", "Matchday reminders"],
+                ["medicalReminders", "Medical reminders"],
+                ["contractReminders", "Contract reminders"],
+                ["boardReminders", "Board reminders"],
+                ["inboxReminders", "Inbox reminders"],
+                ["quietMode", "Quiet mode"],
+              ] as Array<[keyof NotificationSettings, string]>).map(([key, label]) => (
+                <label className="toggle-row" key={key}>
+                  <span>{label}</span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(game.notificationSettings[key])}
+                    onChange={(event) => handleUpdateNotificationSetting(key, event.target.checked)}
+                  />
+                </label>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Active reminders</h3>
+                <p className="muted">
+                  Reminder-ele sunt calculate din starea curenta a carierei si pot fi arhivate in save payload.
+                </p>
+              </div>
+              <button className="secondary-button" type="button" onClick={handleArchiveNotificationReminders}>
+                Archive current
+              </button>
+            </div>
+            {notificationCenter.reminders.length === 0 ? (
+              <p className="empty-state">Nu exista reminder-e active acum.</p>
+            ) : (
+              <div className="beta-check-grid">
+                {notificationCenter.reminders.map((reminder) => (
+                  <article className={`beta-check-card ${reminder.priority === "high" ? "fail" : reminder.priority === "medium" ? "warning" : "pass"}`} key={reminder.id}>
+                    <div className="section-header compact-header">
+                      <div>
+                        <span className="team-label">{reminder.type}</span>
+                        <h4>{reminder.title}</h4>
+                      </div>
+                      <span className={`status-badge ${reminder.priority === "high" ? "danger" : reminder.priority === "medium" ? "warning" : "ok"}`}>
+                        {reminder.priority}
+                      </span>
+                    </div>
+                    <p className="muted">{reminder.summary}</p>
+                    <small>{reminder.action}</small>
+                  </article>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Notification readiness checks</h3>
+            <div className="beta-check-grid">
+              {notificationCenter.checks.map((item) => (
+                <article className={`beta-check-card ${item.status}`} key={item.id}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">notification</span>
+                      <h4>{item.title}</h4>
+                    </div>
+                    <span className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="muted">{item.summary}</p>
+                  <small>{item.action}</small>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Archived reminders</h3>
+            <div className="debug-grid compact-debug">
+              <div className="debug-fact"><span>Total archived</span><strong>{game.notificationHistory.length}</strong></div>
+              <div className="debug-fact"><span>Schema</span><strong>{SAVE_SCHEMA_VERSION}</strong></div>
+              <div className="debug-fact"><span>PWA</span><strong>{pwaServiceWorkerStatus}</strong></div>
+              <div className="debug-fact"><span>Standalone</span><strong>{pwaInstalled ? "yes" : "no"}</strong></div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>QA commands</h3>
+            <div className="beta-action-list">
+              {notificationCenter.qaCommands.map((command) => (
+                <div className="beta-action" key={command}>
+                  <span>$</span>
+                  <p><code>{command}</code></p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Release notes v4.3</h3>
+            <div className="beta-action-list">
+              {notificationCenter.releaseNotes.map((note) => (
+                <div className="beta-action" key={note}>
+                  <span>→</span>
+                  <p>{note}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "stability" && (
+        <section className="dashboard-grid admin-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v3.4 Stabilizare</span>
+            <h2>{stabilityReport.statusLabel}</h2>
+            <p className="muted">
+              Panou pentru health check tehnic: schema save, payload size,
+              ErrorBoundary, fullcheck, integritate core data si urmatorii pasi
+              de refactor fara sa rupem jocul.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>Stability score</span><strong>{stabilityReport.score}/100</strong></div>
+              <div className="metric"><span>Passed</span><strong>{stabilityReport.passCount}</strong></div>
+              <div className="metric"><span>Warnings</span><strong>{stabilityReport.warningCount}</strong></div>
+              <div className="metric"><span>Blockers</span><strong>{stabilityReport.failCount}</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Stability score">
+              <i style={{ width: `${stabilityReport.score}%` }} />
+            </div>
+            <p className="muted small-note">
+              Comanda recomandata inainte de release: <code>{stabilityReport.fullCheckCommand}</code>
+            </p>
+          </article>
+
+          <article className="panel">
+            <h3>v3.4 focus</h3>
+            <ul className="clean-list">
+              <li>Save migration system pentru payload-uri vechi.</li>
+              <li>React ErrorBoundary pentru recovery cand UI-ul crapa.</li>
+              <li>Script unic <code>npm run fullcheck</code>.</li>
+              <li>Tipuri centralizate in <code>src/types</code>.</li>
+              <li>Refactor plan gradual pentru <code>App.tsx</code>.</li>
+            </ul>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Stability checks</h3>
+                <p className="muted">Verificari rapide pentru release quality si mentenanta.</p>
+              </div>
+              <span className={`status-pill ${stabilityReport.failCount > 0 ? "danger" : stabilityReport.warningCount > 0 ? "warning" : "ok"}`}>
+                {stabilityReport.failCount > 0 ? "Needs work" : stabilityReport.warningCount > 0 ? "Review" : "Stable"}
+              </span>
+            </div>
+            <div className="beta-check-grid">
+              {stabilityReport.checks.map((item) => (
+                <article className={`beta-check-card ${item.status}`} key={item.id}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">{item.id}</span>
+                      <h4>{item.title}</h4>
+                    </div>
+                    <span className={`status-badge ${item.status === "pass" ? "ok" : item.status === "warning" ? "warning" : "danger"}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="muted">{item.summary}</p>
+                  <small>{item.action}</small>
+                  <button
+                    type="button"
+                    className="secondary-button compact"
+                    onClick={() => setActiveTab(item.targetTab as Tab)}
+                  >
+                    Deschide
+                  </button>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <h3>Quick wins</h3>
+            <div className="beta-action-list">
+              {stabilityReport.quickWins.map((item) => (
+                <div className="beta-action" key={item}>
+                  <span>→</span>
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "database" && (
+        <section className="dashboard-grid admin-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v3.5 Real Database Mode</span>
+            <h2>{realDatabaseMode.statusLabel}</h2>
+            <p className="muted">
+              JSON save-ul ramane fallback sigur, dar cariera poate fi oglindita
+              in tabele Supabase reale pentru debug, rapoarte, cautare si viitoare
+              moduri multiplayer/friends league.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>Readiness</span><strong>{realDatabaseMode.readinessScore}/100</strong></div>
+              <div className="metric"><span>Tabele</span><strong>{realDatabaseMode.tableCount}</strong></div>
+              <div className="metric"><span>Randuri proiectate</span><strong>{realDatabaseMode.totalProjectedRows}</strong></div>
+              <div className="metric"><span>Mode</span><strong>Mirror</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Database readiness">
+              <i style={{ width: `${realDatabaseMode.readinessScore}%` }} />
+            </div>
+            <p className="muted small-note">
+              Canonical fallback ramane <code>manager_saves.payload</code>; tabelele reale sunt mirror verificabil.
+            </p>
+            <div className="button-row">
+              <button type="button" onClick={handleSyncRealDatabase} disabled={!authSession || !isSupabaseConfigured()}>
+                Sync real DB mirror
+              </button>
+              <button type="button" className="secondary-button" onClick={handleSaveSupabase} disabled={!authSession}>
+                Save JSON fallback
+              </button>
+            </div>
+            {databaseSyncStatus && <p className="success-text">{databaseSyncStatus}</p>}
+          </article>
+
+          <article className="panel">
+            <h3>Blockers / warnings</h3>
+            {realDatabaseMode.blockers.length === 0 && realDatabaseMode.warnings.length === 0 ? (
+              <p className="success-text">Real DB mirror este pregatit pentru test live.</p>
+            ) : (
+              <ul className="clean-list">
+                {realDatabaseMode.blockers.map((item) => (
+                  <li key={`blocker-${item}`}><strong>Blocker:</strong> {item}</li>
+                ))}
+                {realDatabaseMode.warnings.map((item) => (
+                  <li key={`warning-${item}`}><strong>Warning:</strong> {item}</li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Real Supabase tables</h3>
+                <p className="muted">Tabelele adaugate in <code>supabase/schema.sql</code> pentru mirror relational.</p>
+              </div>
+              <span className={`status-pill ${realDatabaseMode.status === "blocked" ? "danger" : realDatabaseMode.status === "partial" ? "warning" : "ok"}`}>
+                {realDatabaseMode.status}
+              </span>
+            </div>
+            <div className="beta-check-grid">
+              {realDatabaseMode.tables.map((table) => (
+                <article className={`beta-check-card ${table.status === "ready" ? "pass" : table.status === "empty" ? "warning" : "fail"}`} key={table.table}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">{table.table}</span>
+                      <h4>{table.label}</h4>
+                    </div>
+                    <span className={`status-badge ${table.status === "ready" ? "ok" : table.status === "empty" ? "warning" : "danger"}`}>
+                      {table.rows} rows
+                    </span>
+                  </div>
+                  <p className="muted">{table.purpose}</p>
+                  <small>Conflict target: <code>{table.conflictTarget}</code></small>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Migration steps</h3>
+            <ol className="clean-list numbered-list">
+              {realDatabaseMode.migrationSteps.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+          </article>
+
+          <article className="panel">
+            <h3>Recommended actions</h3>
+            <div className="beta-action-list">
+              {realDatabaseMode.recommendedActions.map((item) => (
+                <div className="beta-action" key={item}>
+                  <span>→</span>
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "multiplayer" && (
+        <section className="dashboard-grid admin-grid">
+          <article className="panel highlight-panel beta-hero">
+            <span className="team-label">v3.6 Multiplayer / Friends League</span>
+            <h2>{multiplayerLeague.statusLabel}</h2>
+            <p className="muted">
+              Modul de friends league foloseste Supabase Auth + Real Database Mode
+              pentru camere private, cod de invitatie si leaderboard intre manageri.
+              JSON save-ul ramane fallback sigur.
+            </p>
+            <div className="metric-grid compact-metrics">
+              <div className="metric"><span>Readiness</span><strong>{multiplayerLeague.readinessScore}/100</strong></div>
+              <div className="metric"><span>League code</span><strong>{multiplayerLeague.leagueCode}</strong></div>
+              <div className="metric"><span>Join code</span><strong>{multiplayerLeague.joinCode}</strong></div>
+              <div className="metric"><span>Managers</span><strong>{multiplayerLeague.projectedManagers}</strong></div>
+            </div>
+            <div className="progress-track large-progress" aria-label="Multiplayer readiness">
+              <i style={{ width: `${multiplayerLeague.readinessScore}%` }} />
+            </div>
+            <p className="muted small-note">Invite text: {multiplayerLeague.invite.shareText}</p>
+            <div className="button-row">
+              <button type="button" onClick={handleSaveSupabase} disabled={!authSession}>
+                Save cloud fallback
+              </button>
+              <button type="button" className="secondary-button" onClick={handleSyncRealDatabase} disabled={!authSession || !isSupabaseConfigured()}>
+                Sync real DB first
+              </button>
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Blockers / warnings</h3>
+            {multiplayerLeague.blockers.length === 0 && multiplayerLeague.warnings.length === 0 ? (
+              <p className="success-text">Friends League este pregatit pentru test live.</p>
+            ) : (
+              <ul className="clean-list">
+                {multiplayerLeague.blockers.map((item) => (
+                  <li key={`mp-blocker-${item}`}><strong>Blocker:</strong> {item}</li>
+                ))}
+                {multiplayerLeague.warnings.map((item) => (
+                  <li key={`mp-warning-${item}`}><strong>Warning:</strong> {item}</li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Friends leaderboard preview</h3>
+                <p className="muted">Snapshot comparativ pentru managerul curent si doua intrari demo de test.</p>
+              </div>
+              <span className={`status-pill ${multiplayerLeague.status === "blocked" ? "danger" : multiplayerLeague.status === "partial" ? "warning" : "ok"}`}>
+                {multiplayerLeague.status}
+              </span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Manager</th>
+                    <th>Club</th>
+                    <th>Sezon</th>
+                    <th>Puncte</th>
+                    <th>Job</th>
+                    <th>Cash</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {multiplayerLeague.leaderboard.map((manager, index) => (
+                    <tr className={manager.managerId === authSession?.user.id ? "user-row" : undefined} key={manager.managerId}>
+                      <td>{index + 1}</td>
+                      <td>{manager.managerName}</td>
+                      <td>{manager.clubName}</td>
+                      <td>{manager.seasonNumber}</td>
+                      <td>{manager.points}</td>
+                      <td>{manager.jobSecurity}</td>
+                      <td>{formatMoney(manager.cashBalance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel wide-panel">
+            <div className="section-header">
+              <div>
+                <h3>Supabase multiplayer tables</h3>
+                <p className="muted">Tabele noi adaugate in schema.sql pentru rooms, membership si snapshots.</p>
+              </div>
+              <span className="status-pill ok">RLS by auth.uid()</span>
+            </div>
+            <div className="beta-check-grid">
+              {multiplayerLeague.databaseTables.map((table) => (
+                <article className="beta-check-card pass" key={table.table}>
+                  <div className="section-header compact-header">
+                    <div>
+                      <span className="team-label">{table.table}</span>
+                      <h4>{table.rows} projected rows</h4>
+                    </div>
+                    <span className="status-badge ok">RLS</span>
+                  </div>
+                  <p className="muted">{table.purpose}</p>
+                  <small>{table.rls}</small>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel">
+            <h3>Recommended actions</h3>
+            <div className="beta-action-list">
+              {multiplayerLeague.recommendedActions.map((item) => (
+                <div className="beta-action" key={item}>
+                  <span>→</span>
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
           </article>
         </section>
       )}

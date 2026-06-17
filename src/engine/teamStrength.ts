@@ -1,5 +1,6 @@
 import { Player, Tactic, Team, TeamStrength } from "./types";
 import { isPlayerInjured, normalizePlayerStatus } from "./playerStatus";
+import { getActiveLineupPlayers } from "./lineupSelection";
 
 function average(values: number[]): number {
   if (values.length === 0) return 50;
@@ -144,7 +145,7 @@ function getPressingModifiers(tactic: Tactic) {
 export function calculateTeamStrength(team: Team, tactic: Tactic): TeamStrength {
   const normalizedTeam = {
     ...team,
-    players: team.players.map(normalizePlayerStatus),
+    players: getActiveLineupPlayers(team).map(normalizePlayerStatus),
   };
   const goalkeepers = getPlayersByPosition(normalizedTeam.players, "GK");
   const defenders = getPlayersByPosition(normalizedTeam.players, "DEF");

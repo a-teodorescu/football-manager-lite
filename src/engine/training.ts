@@ -96,7 +96,7 @@ export function calculatePlayerOverall(player: Player): number {
   );
 }
 
-function trainPlayer(player: Player, focus: TrainingFocus, seasonNumber: number, round: number): PlayerTrainingChange & { player: Player } {
+function trainPlayer(player: Player, focus: TrainingFocus, seasonNumber: number, round: number, facilityBonus = 0): PlayerTrainingChange & { player: Player } {
   const seed = `${player.id}:${focus}:s${seasonNumber}:r${round}`;
   const score = getDeterministicScore(seed);
   const youthBonus = getYouthBonus(player.age);
@@ -107,7 +107,7 @@ function trainPlayer(player: Player, focus: TrainingFocus, seasonNumber: number,
   attributes.forEach((attribute, index) => {
     const baseChance = focus === "balanced" ? 46 : 54;
     const positionBonus = index === 0 ? 16 : index === 1 ? 8 : 0;
-    const chance = baseChance + positionBonus + youthBonus * 7;
+    const chance = baseChance + positionBonus + youthBonus * 7 + facilityBonus;
     const attributeRoll = (score + index * 23) % 100;
 
     if (attributeRoll < chance) {
@@ -122,7 +122,7 @@ function trainPlayer(player: Player, focus: TrainingFocus, seasonNumber: number,
 
   if (focus === "fitness") {
     const fitnessBefore = nextPlayer.fitness ?? 100;
-    nextPlayer.fitness = clampStatus(fitnessBefore + 8 + (score % 5));
+    nextPlayer.fitness = clampStatus(fitnessBefore + 8 + (score % 5) + Math.round(facilityBonus / 2));
     nextPlayer.morale = clampRating(nextPlayer.morale + 1);
     if (nextPlayer.fitness > fitnessBefore) {
       improvedAttributes.push("fitness");
@@ -152,9 +152,10 @@ export function runTeamTraining(
   team: Team,
   focus: TrainingFocus,
   seasonNumber: number,
-  round: number
+  round: number,
+  facilityBonus = 0
 ): { team: Team; result: TrainingSessionResult } {
-  const trainedPlayers = team.players.map((player) => trainPlayer(player, focus, seasonNumber, round));
+  const trainedPlayers = team.players.map((player) => trainPlayer(player, focus, seasonNumber, round, facilityBonus));
   const players = trainedPlayers.map((item) => item.player);
   const changes = trainedPlayers
     .filter((item) => item.improvedAttributes.length > 0 || item.overallAfter > item.overallBefore)
@@ -176,7 +177,7 @@ export function runTeamTraining(
       seasonNumber,
       round,
       focus,
-      summary: `${FOCUS_LABELS[focus]} training completed: ${changes.length} key improvements.`,
+      summary: `${FOCUS_LABELS[focus]} training completed: ${changes.length} key improvements${facilityBonus > 0 ? `, facilities bonus +${facilityBonus}%` : ""}.`,
       changes,
     },
   };

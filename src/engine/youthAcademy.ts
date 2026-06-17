@@ -1,4 +1,5 @@
 import { clamp, createSeededRandom, randomInt } from "./random";
+import { createPlayerIdentity, normalizePlayerIdentity } from "./playerIdentity";
 import type { Player, Position, Team } from "./types";
 
 export type AcademyRecordType = "scout" | "promote" | "upgrade";
@@ -99,9 +100,15 @@ function createYouthProspect(seasonNumber: number, round: number, academyLevel: 
   const overall = clamp(randomInt(random, 48, 60) + levelBoost + randomInt(random, -2, 3), 45, 70);
   const potential = getProspectPotential(overall, age, academyLevel, randomInt(random, -2, 7));
 
-  const player: Player = {
+  const player = normalizePlayerIdentity({
     id: `yp-s${seasonNumber}-r${round}-l${academyLevel}-${index}`,
-    name: `${firstNames[randomInt(random, 0, firstNames.length - 1)]} ${lastNames[randomInt(random, 0, lastNames.length - 1)]}`,
+    ...createPlayerIdentity({
+      seed: `youth:${seasonNumber}:${round}:${academyLevel}:${index}`,
+      index,
+      position,
+      age,
+      overall,
+    }),
     position,
     age,
     overall,
@@ -113,7 +120,7 @@ function createYouthProspect(seasonNumber: number, round: number, academyLevel: 
     morale: randomInt(random, 68, 88),
     form: randomInt(random, 58, 78),
     fitness: randomInt(random, 90, 100),
-  };
+  });
 
   return {
     ...player,
@@ -182,7 +189,7 @@ export function promoteYouthProspect(
     throw new Error("Juniorul nu mai exista in academie.");
   }
 
-  const promotedPlayer: Player = {
+  const promotedPlayer: Player = normalizePlayerIdentity({
     id: `${team.id}-academy-${prospect.id}`,
     name: prospect.name,
     position: prospect.position,
@@ -203,7 +210,15 @@ export function promoteYouthProspect(
       expiresSeason: seasonNumber + 4,
       happiness: 82,
     },
-  };
+    countryCode: prospect.countryCode,
+    nationality: prospect.nationality,
+    flagEmoji: prospect.flagEmoji,
+    preferredFoot: prospect.preferredFoot,
+    personality: prospect.personality,
+    role: prospect.role,
+    marketability: prospect.marketability,
+    avatarSeed: prospect.avatarSeed,
+  });
 
   return {
     team: {

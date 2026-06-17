@@ -228,8 +228,8 @@ export function simulateCupRound(input: {
     const result = simulateMatch({
       homeTeam,
       awayTeam,
-      homeTactic: getTeamTactic(homeTeam.id, userTactic),
-      awayTactic: getTeamTactic(awayTeam.id, userTactic),
+      homeTactic: getTeamTactic(homeTeam.id, userTactic, homeTeam),
+      awayTactic: getTeamTactic(awayTeam.id, userTactic, awayTeam),
       seed: `cup_s${seasonNumber}_${match.id}`,
     });
     const winner = getWinnerTeamId(match, result);

@@ -19,6 +19,10 @@ export interface FinanceReport {
   wageCost: number;
   overWagePenalty: number;
   academyCost?: number;
+  commercialIncome?: number;
+  facilitiesIncome?: number;
+  facilitiesMaintenance?: number;
+  staffCost?: number;
   netChange: number;
   balanceAfter: number;
   summary: string;
@@ -95,9 +99,17 @@ export function applyRoundFinances(input: {
   seasonNumber: number;
   round: number;
   academyCost?: number;
+  commercialIncome?: number;
+  facilitiesIncome?: number;
+  facilitiesMaintenance?: number;
+  staffCost?: number;
 }): { finance: ClubFinance; report: FinanceReport } {
   const { finance, userTeam, roundResults, standings, seasonNumber, round } = input;
   const academyCost = input.academyCost ?? 0;
+  const commercialIncome = input.commercialIncome ?? 0;
+  const facilitiesIncome = input.facilitiesIncome ?? 0;
+  const facilitiesMaintenance = input.facilitiesMaintenance ?? 0;
+  const staffCost = input.staffCost ?? 0;
   const userPosition = Math.max(1, standings.findIndex((row) => row.teamId === userTeam.id) + 1 || standings.length);
   const userResult = getRoundResultForTeam(roundResults, userTeam.id);
   const wageCost = calculateSquadWageBill(userTeam);
@@ -105,7 +117,7 @@ export function applyRoundFinances(input: {
   const sponsorIncome = Math.round((finance.sponsorBase + userTeam.reputation * 5 + userTeam.morale * 3 + Math.max(0, 9 - userPosition) * 24) / 10) * 10;
   const matchdayIncome = calculateMatchdayIncome(userResult, userTeam, userPosition);
   const performanceBonus = userResult ? getPerformanceBonus(userResult, userTeam.id) : 0;
-  const netChange = sponsorIncome + matchdayIncome + performanceBonus - wageCost - overWagePenalty - academyCost;
+  const netChange = sponsorIncome + matchdayIncome + performanceBonus + commercialIncome + facilitiesIncome - wageCost - overWagePenalty - academyCost - facilitiesMaintenance - staffCost;
   const balanceAfter = finance.cashBalance + netChange;
   const resultLabel = userResult ? getResultLabel(userResult, userTeam.id) : "fara meci";
 
@@ -124,9 +136,13 @@ export function applyRoundFinances(input: {
       wageCost,
       overWagePenalty,
       academyCost,
+      commercialIncome,
+      facilitiesIncome,
+      facilitiesMaintenance,
+      staffCost,
       netChange,
       balanceAfter,
-      summary: `Runda ${round}: ${resultLabel}, net ${netChange >= 0 ? "+" : ""}€${netChange.toLocaleString("en-US")}k${academyCost > 0 ? `, academy -€${academyCost.toLocaleString("en-US")}k` : ""}.`,
+      summary: `Runda ${round}: ${resultLabel}, net ${netChange >= 0 ? "+" : ""}€${netChange.toLocaleString("en-US")}k${commercialIncome > 0 ? `, sponsorship +€${commercialIncome.toLocaleString("en-US")}k` : ""}${academyCost > 0 ? `, academy -€${academyCost.toLocaleString("en-US")}k` : ""}${staffCost > 0 ? `, staff -€${staffCost.toLocaleString("en-US")}k` : ""}.`,
     },
   };
 }

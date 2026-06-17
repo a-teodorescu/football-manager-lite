@@ -1,9 +1,9 @@
 import { Fixture, generateFixtures } from "./fixtureGenerator";
 import { simulateMatch } from "./matchEngine";
-import { createMockTeam } from "./mockData";
 import { applyRoundStatusEffects, normalizeTeamStatus, type RoundStatusReport } from "./playerStatus";
 import { createInitialStandings, StandingRow, updateStandings } from "./standings";
 import { MatchResult, Tactic, Team } from "./types";
+import { applyTeamIdentity, createExpandedLeagueTeams, getTacticForTeamStyle } from "./leagueExpansion";
 
 export interface FixtureResult {
   fixture: Fixture;
@@ -43,25 +43,20 @@ const teamTactics: Record<string, Tactic> = {
   "team-8": { formation: "4-2-3-1", mentality: "defensive", pressing: "medium" },
 };
 
-export function getTeamTactic(teamId: string, userTactic?: Tactic): Tactic {
+export function getTeamTactic(teamId: string, userTactic?: Tactic, team?: Team): Tactic {
   if (teamId === USER_TEAM_ID && userTactic) {
     return userTactic;
   }
 
-  return teamTactics[teamId] ?? defaultTactic;
+  const identifiedTeam = team ? applyTeamIdentity(team) : undefined;
+
+  return identifiedTeam?.tacticalStyle
+    ? getTacticForTeamStyle(identifiedTeam.tacticalStyle)
+    : teamTactics[teamId] ?? defaultTactic;
 }
 
 export function createMockLeagueTeams(): Team[] {
-  return [
-    createMockTeam("team-1", "FC Bucuresti", 74),
-    createMockTeam("team-2", "Rapid Nord", 72),
-    createMockTeam("team-3", "Dinamo Est", 70),
-    createMockTeam("team-4", "Cluj United", 73),
-    createMockTeam("team-5", "Timisoara Athletic", 69),
-    createMockTeam("team-6", "Brasov Wolves", 68),
-    createMockTeam("team-7", "Constanta Stars", 71),
-    createMockTeam("team-8", "Iasi City", 67),
-  ].map(normalizeTeamStatus);
+  return createExpandedLeagueTeams().map((team) => normalizeTeamStatus(team));
 }
 
 export function getMaxRound(fixtures: Fixture[]): number {
@@ -97,8 +92,8 @@ export function simulateFixture(
   const result = simulateMatch({
     homeTeam: fixture.homeTeam,
     awayTeam: fixture.awayTeam,
-    homeTactic: getTeamTactic(fixture.homeTeam.id, userTactic),
-    awayTactic: getTeamTactic(fixture.awayTeam.id, userTactic),
+    homeTactic: getTeamTactic(fixture.homeTeam.id, userTactic, fixture.homeTeam),
+    awayTactic: getTeamTactic(fixture.awayTeam.id, userTactic, fixture.awayTeam),
     seed: `season_${seasonNumber}_${fixture.id}`,
   });
 

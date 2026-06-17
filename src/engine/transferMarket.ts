@@ -1,4 +1,5 @@
 import { clamp, createSeededRandom, randomInt } from "./random";
+import { createPlayerIdentity, normalizePlayerIdentity } from "./playerIdentity";
 import type { Player, Position, Team } from "./types";
 
 export interface TransferMarketPlayer extends Player {
@@ -110,9 +111,15 @@ function createMarketPlayer(seasonNumber: number, round: number, index: number):
   const potentialBias = age <= 22 ? randomInt(random, 0, 4) : randomInt(random, -2, 2);
   const overall = clamp(baseOverall + potentialBias, 58, 81);
 
-  const player: Player = {
+  const player = normalizePlayerIdentity({
     id: `fa-s${seasonNumber}-r${round}-${index}`,
-    name: `${firstNames[randomInt(random, 0, firstNames.length - 1)]} ${lastNames[randomInt(random, 0, lastNames.length - 1)]}`,
+    ...createPlayerIdentity({
+      seed: `transfer:${seasonNumber}:${round}:${index}`,
+      index,
+      position,
+      age,
+      overall,
+    }),
     position,
     age,
     overall,
@@ -124,7 +131,7 @@ function createMarketPlayer(seasonNumber: number, round: number, index: number):
     morale: randomInt(random, 62, 84),
     form: randomInt(random, 60, 82),
     fitness: randomInt(random, 88, 100),
-  };
+  });
 
   return {
     ...player,
@@ -180,7 +187,7 @@ export function buyMarketPlayer(
   }
 
   const contractYears = marketPlayer.age >= 32 ? 1 : marketPlayer.age <= 23 ? 4 : 3;
-  const signedPlayer: Player = {
+  const signedPlayer: Player = normalizePlayerIdentity({
     ...marketPlayer,
     id: `${team.id}-signed-${marketPlayer.id}`,
     morale: clamp(marketPlayer.morale + 4, 1, 100),
@@ -192,7 +199,7 @@ export function buyMarketPlayer(
       expiresSeason: seasonNumber + contractYears,
       happiness: 78,
     },
-  };
+  });
   const nextBudget = budget - marketPlayer.value;
 
   return {

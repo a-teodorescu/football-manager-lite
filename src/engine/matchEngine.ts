@@ -7,23 +7,32 @@ import {
   Team,
   TeamStrength,
 } from "./types";
-import { calculateTeamStrength } from "./teamStrength";
+import { calculateAdvancedTeamStrength as calculateTeamStrength } from "./advancedTactics";
 import { clamp, createSeededRandom, pickRandom } from "./random";
+import { getActiveLineupPlayers, getSelectedLineupPlayerIds } from "./lineupSelection";
+import {
+  applySubstitutionToActiveIds,
+  getSubstitutionPlayerNames,
+  normalizeSubstitutionPlan,
+} from "./substitutions";
+import { getSetPieceTaker, scorePlayerForSetPieceRole } from "./setPieces";
 
 function getAvailablePlayersForShot(team: Team): Player[] {
-  const preferred = team.players.filter(
+  const activePlayers = getActiveLineupPlayers(team);
+  const preferred = activePlayers.filter(
     (player) => player.position === "ATT" || player.position === "MID"
   );
 
-  return preferred.length > 0 ? preferred : team.players;
+  return preferred.length > 0 ? preferred : activePlayers;
 }
 
 function getAvailablePlayersForCard(team: Team): Player[] {
-  const preferred = team.players.filter(
+  const activePlayers = getActiveLineupPlayers(team);
+  const preferred = activePlayers.filter(
     (player) => player.position === "DEF" || player.position === "MID"
   );
 
-  return preferred.length > 0 ? preferred : team.players;
+  return preferred.length > 0 ? preferred : activePlayers;
 }
 
 function calculateStaminaModifier(minute: number): number {
@@ -119,11 +128,194 @@ function createYellowCardText(teamName: string, playerName: string): string {
   return `${playerName} de la ${teamName} primeste cartonas galben dupa un fault intarziat.`;
 }
 
+function createSubstitutionText(teamName: string, inName: string, outName: string): string {
+  return `${teamName} face o schimbare: intra ${inName}, iese ${outName}.`;
+}
+
+function createFreeKickGoalText(teamName: string, playerName: string): string {
+  return `GOL ${teamName}! ${playerName} marcheaza direct din lovitura libera.`;
+}
+
+function createFreeKickThreatText(teamName: string, playerName: string): string {
+  return `${teamName} obtine o lovitura libera periculoasa. ${playerName} executa bine, dar apararea respinge.`;
+}
+
+function createCornerGoalText(teamName: string, takerName: string, finisherName: string): string {
+  return `GOL ${teamName}! Corner executat de ${takerName}, iar ${finisherName} finalizeaza.`;
+}
+
+function createCornerThreatText(teamName: string, takerName: string, finisherName: string): string {
+  return `${teamName} pune presiune din corner: ${takerName} centreaza, ${finisherName} trimite spre poarta.`;
+}
+
+function createTeamWithActiveLineup(team: Team, activePlayerIds: string[]): Team {
+  return {
+    ...team,
+    lineupPlayerIds: activePlayerIds,
+  };
+}
+
+function getSetPieceFinisher(team: Team, random: () => number): Player {
+  const activePlayers = getActiveLineupPlayers(team);
+  const preferred = activePlayers.filter(
+    (player) => player.position === "ATT" || player.position === "DEF" || player.position === "MID",
+  );
+
+  return pickRandom(random, preferred.length > 0 ? preferred : activePlayers);
+}
+
+function tryFreeKickAttack(params: {
+  random: () => number;
+  minute: number;
+  attackingSide: "home" | "away";
+  attackingTeam: Team;
+  defendingStrength: TeamStrength;
+  tacticFormation: SimulateMatchInput["homeTactic"]["formation"];
+  activePlayerIds: string[];
+  stats: MatchStats;
+  events: MatchEvent[];
+  addGoal: () => void;
+}): boolean {
+  const taker = getSetPieceTaker(
+    params.attackingTeam,
+    "freeKick",
+    params.tacticFormation,
+    params.activePlayerIds,
+  );
+  if (!taker) return false;
+
+  const specialistScore = scorePlayerForSetPieceRole(taker, "freeKick");
+  const xgValue = clamp(0.05 + specialistScore / 900, 0.06, 0.18);
+  addShot(params.stats, params.attackingSide);
+  addXg(params.stats, params.attackingSide, xgValue);
+
+  const onTargetChance = clamp(0.18 + specialistScore / 190, 0.28, 0.68);
+  if (params.random() > onTargetChance) {
+    params.events.push({
+      minute: params.minute,
+      type: "set_piece",
+      team: params.attackingSide,
+      playerId: taker.id,
+      playerName: taker.name,
+      text: createFreeKickThreatText(params.attackingTeam.name, taker.name),
+    });
+    return true;
+  }
+
+  addShotOnTarget(params.stats, params.attackingSide);
+  const goalChance = clamp(
+    specialistScore / (specialistScore + params.defendingStrength.goalkeeper * 1.9),
+    0.05,
+    0.24,
+  );
+
+  if (params.random() < goalChance) {
+    params.addGoal();
+    params.events.push({
+      minute: params.minute,
+      type: "goal",
+      team: params.attackingSide,
+      playerId: taker.id,
+      playerName: taker.name,
+      text: createFreeKickGoalText(params.attackingTeam.name, taker.name),
+    });
+  } else {
+    params.events.push({
+      minute: params.minute,
+      type: "set_piece",
+      team: params.attackingSide,
+      playerId: taker.id,
+      playerName: taker.name,
+      text: createFreeKickThreatText(params.attackingTeam.name, taker.name),
+    });
+  }
+
+  return true;
+}
+
+function tryCornerAttack(params: {
+  random: () => number;
+  minute: number;
+  attackingSide: "home" | "away";
+  attackingTeam: Team;
+  defendingStrength: TeamStrength;
+  tacticFormation: SimulateMatchInput["homeTactic"]["formation"];
+  activePlayerIds: string[];
+  stats: MatchStats;
+  events: MatchEvent[];
+  addGoal: () => void;
+}): boolean {
+  const role = params.random() < 0.5 ? "leftCorner" : "rightCorner";
+  const taker = getSetPieceTaker(
+    params.attackingTeam,
+    role,
+    params.tacticFormation,
+    params.activePlayerIds,
+  );
+  if (!taker) return false;
+
+  const finisher = getSetPieceFinisher(params.attackingTeam, params.random);
+  const takerScore = scorePlayerForSetPieceRole(taker, role);
+  const finisherScore = Math.round((finisher.shooting * 0.42 + finisher.overall * 0.38 + finisher.form * 0.2));
+  const threatScore = takerScore * 0.58 + finisherScore * 0.42;
+  const xgValue = clamp(0.06 + threatScore / 1050, 0.07, 0.19);
+
+  addShot(params.stats, params.attackingSide);
+  addXg(params.stats, params.attackingSide, xgValue);
+
+  const onTargetChance = clamp(0.2 + threatScore / 220, 0.3, 0.66);
+  if (params.random() > onTargetChance) {
+    params.events.push({
+      minute: params.minute,
+      type: "set_piece",
+      team: params.attackingSide,
+      playerId: taker.id,
+      playerName: taker.name,
+      text: createCornerThreatText(params.attackingTeam.name, taker.name, finisher.name),
+    });
+    return true;
+  }
+
+  addShotOnTarget(params.stats, params.attackingSide);
+  const goalChance = clamp(
+    threatScore / (threatScore + params.defendingStrength.goalkeeper * 2 + params.defendingStrength.defense * 0.7),
+    0.04,
+    0.23,
+  );
+
+  if (params.random() < goalChance) {
+    params.addGoal();
+    params.events.push({
+      minute: params.minute,
+      type: "goal",
+      team: params.attackingSide,
+      playerId: finisher.id,
+      playerName: finisher.name,
+      text: createCornerGoalText(params.attackingTeam.name, taker.name, finisher.name),
+    });
+  } else {
+    params.events.push({
+      minute: params.minute,
+      type: "set_piece",
+      team: params.attackingSide,
+      playerId: taker.id,
+      playerName: taker.name,
+      text: createCornerThreatText(params.attackingTeam.name, taker.name, finisher.name),
+    });
+  }
+
+  return true;
+}
+
 export function simulateMatch(input: SimulateMatchInput): MatchResult {
   const random = createSeededRandom(input.seed);
 
-  const homeStrength = calculateTeamStrength(input.homeTeam, input.homeTactic);
-  const awayStrength = calculateTeamStrength(input.awayTeam, input.awayTactic);
+  let homeActivePlayerIds = getSelectedLineupPlayerIds(input.homeTeam, input.homeTactic.formation);
+  let awayActivePlayerIds = getSelectedLineupPlayerIds(input.awayTeam, input.awayTactic.formation);
+  const homeSubstitutionPlan = normalizeSubstitutionPlan(input.homeTeam);
+  const awaySubstitutionPlan = normalizeSubstitutionPlan(input.awayTeam);
+  const appliedHomeSubstitutions = new Set<string>();
+  const appliedAwaySubstitutions = new Set<string>();
 
   let homeScore = 0;
   let awayScore = 0;
@@ -137,10 +329,56 @@ export function simulateMatch(input: SimulateMatchInput): MatchResult {
     },
   ];
 
-  const homePossession = calculateHomePossession(homeStrength, awayStrength);
+  const initialHomeTeam = createTeamWithActiveLineup(input.homeTeam, homeActivePlayerIds);
+  const initialAwayTeam = createTeamWithActiveLineup(input.awayTeam, awayActivePlayerIds);
+  const initialHomeStrength = calculateTeamStrength(initialHomeTeam, input.homeTactic);
+  const initialAwayStrength = calculateTeamStrength(initialAwayTeam, input.awayTactic);
+  const homePossession = calculateHomePossession(initialHomeStrength, initialAwayStrength);
   const stats = createInitialStats(homePossession);
 
   for (let minute = 1; minute <= 90; minute++) {
+    for (const instruction of homeSubstitutionPlan) {
+      const key = `${instruction.outPlayerId}->${instruction.inPlayerId}`;
+      if (appliedHomeSubstitutions.has(key) || instruction.minute !== minute) continue;
+      if (!homeActivePlayerIds.includes(instruction.outPlayerId)) continue;
+      if (homeActivePlayerIds.includes(instruction.inPlayerId)) continue;
+
+      homeActivePlayerIds = applySubstitutionToActiveIds(homeActivePlayerIds, instruction);
+      appliedHomeSubstitutions.add(key);
+      const names = getSubstitutionPlayerNames(input.homeTeam, instruction);
+      events.push({
+        minute,
+        type: "substitution",
+        team: "home",
+        playerId: instruction.inPlayerId,
+        playerName: names.inName,
+        text: createSubstitutionText(input.homeTeam.name, names.inName, names.outName),
+      });
+    }
+
+    for (const instruction of awaySubstitutionPlan) {
+      const key = `${instruction.outPlayerId}->${instruction.inPlayerId}`;
+      if (appliedAwaySubstitutions.has(key) || instruction.minute !== minute) continue;
+      if (!awayActivePlayerIds.includes(instruction.outPlayerId)) continue;
+      if (awayActivePlayerIds.includes(instruction.inPlayerId)) continue;
+
+      awayActivePlayerIds = applySubstitutionToActiveIds(awayActivePlayerIds, instruction);
+      appliedAwaySubstitutions.add(key);
+      const names = getSubstitutionPlayerNames(input.awayTeam, instruction);
+      events.push({
+        minute,
+        type: "substitution",
+        team: "away",
+        playerId: instruction.inPlayerId,
+        playerName: names.inName,
+        text: createSubstitutionText(input.awayTeam.name, names.inName, names.outName),
+      });
+    }
+
+    const homeMatchTeam = createTeamWithActiveLineup(input.homeTeam, homeActivePlayerIds);
+    const awayMatchTeam = createTeamWithActiveLineup(input.awayTeam, awayActivePlayerIds);
+    const homeStrength = calculateTeamStrength(homeMatchTeam, input.homeTactic);
+    const awayStrength = calculateTeamStrength(awayMatchTeam, input.awayTactic);
     const staminaModifier = calculateStaminaModifier(minute);
 
     const homeMinutePower =
@@ -163,8 +401,8 @@ export function simulateMatch(input: SimulateMatchInput): MatchResult {
     const homeAttackProbability = homeMinutePower / combinedPower;
     const attackingSide: "home" | "away" = random() < homeAttackProbability ? "home" : "away";
 
-    const attackingTeam = attackingSide === "home" ? input.homeTeam : input.awayTeam;
-    const defendingTeam = attackingSide === "home" ? input.awayTeam : input.homeTeam;
+    const attackingTeam = attackingSide === "home" ? homeMatchTeam : awayMatchTeam;
+    const defendingTeam = attackingSide === "home" ? awayMatchTeam : homeMatchTeam;
 
     const attackingStrength = attackingSide === "home" ? homeStrength : awayStrength;
     const defendingStrength = attackingSide === "home" ? awayStrength : homeStrength;
@@ -193,7 +431,49 @@ export function simulateMatch(input: SimulateMatchInput): MatchResult {
         });
       }
 
+      const activeIds = attackingSide === "home" ? homeActivePlayerIds : awayActivePlayerIds;
+      const tacticFormation = attackingSide === "home" ? input.homeTactic.formation : input.awayTactic.formation;
+      if (random() < 0.32) {
+        tryFreeKickAttack({
+          random,
+          minute,
+          attackingSide,
+          attackingTeam,
+          defendingStrength,
+          tacticFormation,
+          activePlayerIds: activeIds,
+          stats,
+          events,
+          addGoal: () => {
+            if (attackingSide === "home") homeScore += 1;
+            else awayScore += 1;
+          },
+        });
+      }
+
       continue;
+    }
+
+    const activeIds = attackingSide === "home" ? homeActivePlayerIds : awayActivePlayerIds;
+    const tacticFormation = attackingSide === "home" ? input.homeTactic.formation : input.awayTactic.formation;
+    if (random() < 0.1) {
+      const cornerCreated = tryCornerAttack({
+        random,
+        minute,
+        attackingSide,
+        attackingTeam,
+        defendingStrength,
+        tacticFormation,
+        activePlayerIds: activeIds,
+        stats,
+        events,
+        addGoal: () => {
+          if (attackingSide === "home") homeScore += 1;
+          else awayScore += 1;
+        },
+      });
+
+      if (cornerCreated) continue;
     }
 
     const shooter = pickRandom(random, getAvailablePlayersForShot(attackingTeam));
@@ -289,5 +569,13 @@ export function simulateMatch(input: SimulateMatchInput): MatchResult {
     events,
 
     seed: input.seed,
+    substitutions: {
+      home: homeSubstitutionPlan.filter((instruction) =>
+        appliedHomeSubstitutions.has(`${instruction.outPlayerId}->${instruction.inPlayerId}`),
+      ),
+      away: awaySubstitutionPlan.filter((instruction) =>
+        appliedAwaySubstitutions.has(`${instruction.outPlayerId}->${instruction.inPlayerId}`),
+      ),
+    },
   };
 }
